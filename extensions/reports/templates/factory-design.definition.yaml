@@ -166,16 +166,12 @@ globalArguments:
     - id: assembly
       description: >-
         Phase 6 — Assembly (deterministic). The builder consolidates the phase
-        artifacts into one `design` artifact (the DesignRecord), then this stage
-        runs @atalanta/factory-assembler.build to render the target factory YAML.
+        artifacts into one `design` artifact (the DesignRecord). Recording it
+        fires the @atalanta/factory-assembler REPORT, which reads the design and
+        emits the target factory definition as json. No LLM, no assembler model.
       work:
-        mode: method
-        method:
-          modelIdOrName: assembler
-          methodName: build
-          inputs:
-            session: '${{ self.workItem }}'
-        resultEvidence: assembly-run
+        mode: interactive
+        skills: [factory-builder]
       artifacts:
         - name: design
           schema:
@@ -190,13 +186,11 @@ globalArguments:
           to: confirm
           gates:
             - { type: artifact-exists, config: { artifact: design } }
-            - type: evidence-recorded
-              config: { name: assembly-run, requireField: { status: succeeded } }
 
     - id: confirm
       description: >-
-        Phase 7 — Human confirm. Present the rendered target factory YAML and its
-        Mermaid; on approval the interview is done.
+        Phase 7 — Human confirm. Present the assembled definition (the assembler
+        report's json) and the target's Mermaid; on approval the interview is done.
       work:
         mode: interactive
         skills: [factory-builder]
@@ -221,6 +215,13 @@ globalArguments:
       gates:
         - type: human-approval
           config: { id: abort-confirmation }
+
+reports:
+  require:
+    - { name: "@swamp/software-factory/work-item-summary", methods: [summary] }
+    # The assembler report fires on record_artifact (self-guards to the `design`
+    # artifact) and emits the target factory definition as json.
+    - { name: "@atalanta/factory-assembler", methods: [record_artifact] }
 
 reports:
   require:

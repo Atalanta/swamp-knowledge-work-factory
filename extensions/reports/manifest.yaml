@@ -3,9 +3,12 @@ name: '@atalanta/factory-assembler'
 version: 2026.07.04.1
 description: |
   Deterministically assemble a @swamp/software-factory definition from the design
-  record produced by the factory-design interview. A pure projection: it reads
-  the interview's consolidated `design` artifact (a DesignRecord) and renders the
-  target factory's globalArguments + reports as YAML, emitted as a file output.
+  record produced by the factory-design interview. This is a swamp REPORT, not a
+  model: it scopes to the interview's record_artifact method, fires when the
+  consolidated `design` artifact is recorded, validates it against a zod
+  DesignRecordSchema, and emits the target factory's definition object as its
+  json output (plus a readable markdown rendering). A pure projection — no LLM, no
+  serialisation library.
 
   Fidelity is hybrid — common patterns are captured as intent in the design
   record and expanded here by rule (a review stage's fresh + findings-clear +
@@ -15,27 +18,28 @@ description: |
   unit-tested in isolation.
 
   Non-determinism lives in the interview and is captured as evidence; assembly is
-  a function of it — the same design record always produces the same factory. The
-  output is a file artifact (evidence); installing it as a live git-tracked
-  definition is a separate explicit step, preserving swamp's source/runtime split.
+  a function of it — the same design record always produces the same definition.
+  The report's json is the definition object; the driver installs it as a live
+  git-tracked factory as a separate explicit step, preserving swamp's
+  source/runtime split (the report produces data, the driver turns it to source).
 
-  Ships the `factory-builder` skill that drives the interview and this assembler.
+  Ships the `factory-builder` skill that drives the interview and wires this
+  report, plus the bundled factory-design interview template.
 
   ## Use
 
   ```
   swamp extension pull @atalanta/factory-assembler
-  swamp model create @atalanta/factory-assembler assembler
-  # invoke the bundled `factory-builder` skill to run the factory-design interview
+  # invoke the bundled `factory-builder` skill; say "build me a kw factory"
   ```
 repository: 'https://github.com/Atalanta/swamp-knowledge-work-factory'
-models:
-  - factory_assembler.ts
+models: []
 workflows: []
 vaults: []
 drivers: []
 datastores: []
-reports: []
+reports:
+  - factory_assembler.ts
 skills:
   - factory-builder
 additionalFiles:

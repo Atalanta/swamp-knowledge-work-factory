@@ -204,22 +204,19 @@ globalArguments:
     - id: assembly
       description: >-
         Phase 6 — Assembly (deterministic). The builder consolidates the five
-        phase artifacts into one `design` artifact (the DesignRecord the
-        assembler reads), then this stage runs @atalanta/factory-assembler.build
-        to render the target factory YAML as a file output. No LLM: a pure
-        projection of the recorded design.
+        phase artifacts into one `design` artifact (the DesignRecord). Recording
+        that artifact fires the @atalanta/factory-assembler REPORT, which reads
+        the design and emits the target factory's definition object as json. No
+        LLM, no assembler model — a pure projection of the recorded design. The
+        driver reads the report's json to get the definition.
       work:
-        mode: method
-        method:
-          modelIdOrName: assembler
-          methodName: build
-          inputs:
-            session: '${{ self.workItem }}'
-        resultEvidence: assembly-run
+        mode: interactive
+        skills: [factory-builder]
       artifacts:
         # The consolidated machine-facing DesignRecord. The builder records this
-        # from the five phase artifacts BEFORE running the assembler method.
-        # Nested shape is validated for real by the assembler's zod schema.
+        # from the five phase artifacts. Its nested shape is validated for real
+        # by the assembler report's zod DesignRecordSchema when the report fires
+        # on this record_artifact; the report's json is the assembled definition.
         - name: design
           schema:
             type: object
@@ -233,16 +230,14 @@ globalArguments:
           to: confirm
           gates:
             - { type: artifact-exists, config: { artifact: design } }
-            - type: evidence-recorded
-              config: { name: assembly-run, requireField: { status: succeeded } }
 
     - id: confirm
       description: >-
-        Phase 7 — Human confirm. Present the rendered target factory YAML and its
-        Mermaid to the human. On approval the interview is done; the target
-        factory YAML (a file artifact on the assembler) is installed as a live
-        definition as a separate explicit step. The interview never runs the
-        target factory.
+        Phase 7 — Human confirm. Present the assembled definition (the assembler
+        report's json for this design) and the target's Mermaid to the human. On
+        approval the interview is done; the definition is installed as a live
+        factory as a separate explicit step. The interview never runs the target
+        factory.
       work:
         mode: interactive
         skills: [factory-builder]
@@ -271,4 +266,7 @@ globalArguments:
 reports:
   require:
     - { name: "@swamp/software-factory/work-item-summary", methods: [summary] }
+    # The assembler report fires on record_artifact (it self-guards to the
+    # `design` artifact) and emits the target factory definition as json.
+    - { name: "@atalanta/factory-assembler", methods: [record_artifact] }
 methods: {}

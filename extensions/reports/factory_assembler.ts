@@ -1,31 +1,36 @@
 /**
  * Deterministically assemble a `@swamp/software-factory` definition from the
- * design record produced by the `factory-design` interview factory.
+ * design record produced by the `factory-design` interview.
  *
- * The interview (a `@swamp/software-factory` run driven by the `factory-builder`
- * skill) persists five strict, schema-validated design artifacts — domain,
- * stages, artifacts, adversary/lenses, gates. This model reads those records and
- * renders the target factory's `globalArguments` (stages + globalTransitions) as
- * YAML. It is a PURE PROJECTION: no LLM, no judgement. The same design record
- * always produces the same factory YAML — the non-deterministic work happened in
- * the interview and is captured as evidence; assembly is a function of it.
+ * This is a swamp REPORT, not a model — it represents no external system; it is a
+ * pure design-record -> factory-definition projection, which is exactly what a
+ * report is for (read model run data, transform it, emit `{markdown, json}`). It
+ * scopes to the interview's `record_artifact` method and fires when the
+ * consolidated `design` artifact is recorded, reads that artifact via the
+ * report's dataRepository, validates it against `DesignRecordSchema`, and emits
+ * the target factory's definition object as its `json` output.
+ *
+ * It is a PURE PROJECTION: no LLM, no judgement. The same design record always
+ * produces the same definition — the non-deterministic work happened in the
+ * interview and is captured as evidence; assembly is a function of it.
  *
  * Fidelity is HYBRID (the design decision): common patterns are captured as
- * intent in the design artifacts and expanded here by rule (a review stage's
+ * intent in the design record and expanded here by rule (a review stage's
  * fresh + findings-clear + human-approval stack; a coverage-contract cel gate; a
  * human sign-off), while uncommon needs are captured as raw gate-type+config and
  * passed straight through. `expandGates` is the whole intent->grammar ruleset;
  * it is the one opinionated surface and is unit-testable in isolation.
  *
- * Output is a FILE artifact (text/yaml) in the datastore — evidence, versioned
- * and auditable. Installing it as a live git-tracked definition
- * (`models/@swamp/software-factory/<uuid>.yaml`) is a separate, explicit step,
- * preserving swamp's source/runtime split: a model writes data, not source.
+ * The output is the definition OBJECT (json) — no YAML/serialisation library is
+ * bundled; the datastore is JSON-native and swamp reads JSON definitions.
+ * Installing it as a live git-tracked definition
+ * (`models/@swamp/software-factory/<uuid>.yaml`) is a separate, explicit step
+ * the driver performs, preserving swamp's source/runtime split: the report
+ * produces data, the driver turns it into source.
  *
  * @module
  */
 import { z } from "npm:zod@4";
-import { stringify as stringifyYaml } from "npm:yaml@2.8.3";
 
 // ---------------------------------------------------------------------------
 // Design-record shapes — the structured mirror of the interview's artifacts.
@@ -347,165 +352,184 @@ export function assembleDefinition(
   return out;
 }
 
-/** Render the assembled definition object to YAML text. */
-export function assembleYaml(design: DesignRecord): string {
-  return stringifyYaml(assembleDefinition(design), null, { lineWidth: 100 });
+/**
+ * Count the gates a design expands to (across stage transitions + global
+ * transitions), for the report's summary. Pure.
+ */
+export function countGates(design: DesignRecord): number {
+  const inStages = design.stages.reduce(
+    (n, s) =>
+      n +
+      s.transitions.reduce(
+        (m, t) => m + t.gates.flatMap(expandGates).length,
+        0,
+      ),
+    0,
+  );
+  const inGlobals = design.globalTransitions.reduce(
+    (m, gt) => m + gt.gates.flatMap(expandGates).length,
+    0,
+  );
+  return inStages + inGlobals;
 }
 
 // ---------------------------------------------------------------------------
-// Model definition (IO wrapper around the pure transform).
+// Report definition (the swamp-native home for a deterministic transform).
+//
+// The assembler is NOT a model — it represents no external system. It is a pure
+// design-record -> factory-definition projection, which is exactly what a swamp
+// report is for: read model run data, transform it, emit {markdown, json}. It
+// scopes to the factory-design interview's `record_artifact` method and fires
+// when the consolidated `design` artifact is recorded; it reads that artifact
+// via the report's dataRepository, validates it against DesignRecordSchema, and
+// emits the target factory definition as its `json` output (native — no YAML
+// dependency) plus a readable markdown rendering. The install step reads the
+// json from the persisted report and writes the live definition file.
 // ---------------------------------------------------------------------------
 
-const GlobalArgsSchema = z.object({
-  interviewFactory: z.string().min(1).default("factory-design").describe(
-    "Model name of the factory-design interview instance whose design artifacts " +
-      "this assembler reads.",
-  ),
-});
+const FACTORY_TYPE = "@swamp/software-factory";
+const DESIGN_ARTIFACT = "design";
 
-type GlobalArgs = z.infer<typeof GlobalArgsSchema>;
-
-/** Runtime surface swamp injects; declared structurally (no SDK import). */
-type MethodContext = {
-  globalArgs: GlobalArgs;
-  logger: {
-    info: (msg: string, props?: Record<string, unknown>) => void;
-    warning: (msg: string, props?: Record<string, unknown>) => void;
-    error: (msg: string, props?: Record<string, unknown>) => void;
+/** Structural slice of swamp's method-scope ReportContext (no SDK import). */
+interface ReportContext {
+  scope: string;
+  modelType: unknown;
+  modelId: string;
+  methodName: string;
+  executionStatus: "succeeded" | "failed";
+  methodArgs: Record<string, unknown>;
+  dataRepository: {
+    getContent(
+      type: unknown,
+      modelId: string,
+      dataName: string,
+      version?: number,
+    ): Promise<Uint8Array | null>;
   };
-  queryData?: (
-    predicate: string,
-    select?: string,
-  ) => Promise<unknown[]>;
-  writeResource: (
-    specName: string,
-    instanceName: string,
-    data: Record<string, unknown>,
-  ) => Promise<Record<string, unknown>>;
-  createFileWriter: (
-    specName: string,
-    instanceName: string,
-  ) => Promise<
-    { writeText: (text: string) => Promise<Record<string, unknown>> }
-  >;
-};
+}
+
+/** The physical run-data name of a factory artifact (mirrors the engine). */
+function artifactInstanceName(workItem: string, artifact: string): string {
+  return `artifact-${workItem}-${artifact}`;
+}
 
 /**
- * Read the interview factory's design artifact payloads and assemble them into
- * one DesignRecord. Each phase persists one artifact named
- * `artifact-<session>-<phase>-design`; this reads them and merges into the
- * DesignRecord shape. A single consolidated `design` artifact (the interview's
- * final phase) is preferred when present — one query, one validated object.
+ * Render the assembled definition as readable markdown — a human-facing view of
+ * the factory the design produced, plus the definition object in a fenced JSON
+ * block. No YAML library: the json output is the machine-facing artifact.
  */
-async function loadDesignRecord(
-  context: MethodContext,
-  session: string,
-): Promise<DesignRecord> {
-  if (context.queryData === undefined) {
-    throw new Error("queryData is unavailable; cannot read the design record");
-  }
-  const factory = context.globalArgs.interviewFactory;
-  // The interview's final `assembly` phase consolidates the per-phase artifacts
-  // into a single `design` artifact whose payload is the whole DesignRecord.
-  const rows = await context.queryData(
-    `modelName == "${factory}" && name == "artifact-${session}-design"`,
-    "attributes.payload",
-  );
-  if (rows.length === 0) {
-    throw new Error(
-      `no consolidated design artifact 'artifact-${session}-design' on ` +
-        `'${factory}' — run the interview to its assembly phase first`,
-    );
-  }
-  return DesignRecordSchema.parse(rows[0]);
+function renderMarkdown(
+  design: DesignRecord,
+  def: Record<string, unknown>,
+): string {
+  const gateCount = countGates(design);
+  const stageLines = design.stages
+    .map((s) => {
+      const tag = s.initial ? " (initial)" : s.terminal ? " (terminal)" : "";
+      const mode = s.workMode ? ` — ${s.workMode}` : "";
+      return `- \`${s.id}\`${tag}${mode}`;
+    })
+    .join("\n");
+  return [
+    `# Assembled factory: ${design.factoryName}`,
+    "",
+    design.description ?? "",
+    "",
+    `**${design.stages.length} stages, ${gateCount} gates.**`,
+    design.author || design.adversary
+      ? `Polarity: author \`${design.author ?? "?"}\`, adversary \`${
+        design.adversary ?? "?"
+      }\`.`
+      : "",
+    "",
+    "## Stages",
+    stageLines,
+    "",
+    "## Definition (install this as the target factory's globalArguments + reports)",
+    "",
+    "```json",
+    JSON.stringify(def, null, 2),
+    "```",
+  ].join("\n");
 }
 
-/** Model definition for the deterministic factory assembler. */
-export const model = {
-  type: "@atalanta/factory-assembler",
-  version: "2026.07.04.1",
-  globalArguments: GlobalArgsSchema,
-  resources: {
-    "assembled-factory": {
-      description:
-        "Metadata for one assembled target factory: its name, stage/gate counts, " +
-        "and the file instance holding the rendered YAML.",
-      schema: z.object({
-        factoryName: z.string(),
-        session: z.string(),
-        stageCount: z.number().int(),
-        gateCount: z.number().int(),
-        yamlFile: z.string(),
-        assembledAt: z.string(),
-      }),
-      lifetime: "infinite" as const,
-      garbageCollection: 20,
-    },
-  },
-  files: {
-    "factory-yaml": {
-      description:
-        "The rendered @swamp/software-factory definition YAML (globalArguments " +
-        "+ reports) for a target factory. Evidence; install as a live definition " +
-        "with swamp model create + edit as a separate explicit step.",
-      contentType: "text/yaml",
-      lifetime: "infinite" as const,
-      garbageCollection: 20,
-    },
-  },
-  methods: {
-    build: {
-      description:
-        "Read the factory-design interview's consolidated `design` artifact for a " +
-        "session and deterministically render the target factory's definition YAML " +
-        "as a file output. Pure projection — no LLM.",
-      arguments: z.object({
-        session: z.string().min(1).describe(
-          "The interview work-item / session ref whose design record to assemble.",
-        ),
-      }),
-      execute: async (
-        args: { session: string },
-        context: MethodContext,
-      ): Promise<{ dataHandles: Record<string, unknown>[] }> => {
-        const assembledAt = new Date().toISOString();
-        const design = await loadDesignRecord(context, args.session);
-        const yaml = assembleYaml(design);
+export const report = {
+  name: "@atalanta/factory-assembler",
+  description:
+    "Deterministically assemble a @swamp/software-factory definition from the " +
+    "factory-design interview's consolidated `design` artifact. Fires when that " +
+    "artifact is recorded; emits the target factory definition as json (no LLM, " +
+    "no YAML dependency — a pure projection).",
+  scope: "method",
+  labels: ["software-factory", "meta", "factory-builder"],
+  execute: async (
+    context: ReportContext,
+  ): Promise<{ markdown: string; json: Record<string, unknown> }> => {
+    // Only fire on the interview recording its consolidated `design` artifact.
+    if (
+      String(context.modelType) !== FACTORY_TYPE ||
+      context.methodName !== "record_artifact" ||
+      context.methodArgs.name !== DESIGN_ARTIFACT ||
+      context.executionStatus !== "succeeded"
+    ) {
+      return { markdown: "", json: {} };
+    }
+    const workItem = context.methodArgs.workItem;
+    if (typeof workItem !== "string" || workItem.length === 0) {
+      return { markdown: "", json: {} };
+    }
 
-        const stageCount = design.stages.length;
-        const gateCount = design.stages.reduce(
-          (n, s) => n + s.transitions.reduce((m, t) => m + t.gates.length, 0),
-          design.globalTransitions.reduce((m, gt) => m + gt.gates.length, 0),
-        );
+    // Read the just-recorded design artifact via the report's data repository.
+    const raw = await context.dataRepository.getContent(
+      context.modelType,
+      context.modelId,
+      artifactInstanceName(workItem, DESIGN_ARTIFACT),
+    );
+    if (raw === null) {
+      return {
+        markdown:
+          `# Assembly\n\n_No \`${DESIGN_ARTIFACT}\` artifact found for ${workItem}._\n`,
+        json: { error: "design artifact not found", workItem },
+      };
+    }
 
-        const safe = design.factoryName.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const fileWriter = await context.createFileWriter(
-          "factory-yaml",
-          `factory-yaml-${safe}`,
-        );
-        const fileHandle = await fileWriter.writeText(yaml);
+    // The artifact content is the record envelope; the DesignRecord is its payload.
+    let payload: unknown;
+    try {
+      const envelope = JSON.parse(new TextDecoder().decode(raw)) as {
+        payload?: unknown;
+      };
+      payload = envelope.payload ?? envelope;
+    } catch (e) {
+      return {
+        markdown: `# Assembly\n\n_Could not parse the design artifact: ${
+          String(e)
+        }._\n`,
+        json: { error: "unparsable design artifact", workItem },
+      };
+    }
 
-        context.logger.info("Assembled target factory definition", {
-          factoryName: design.factoryName,
-          session: args.session,
-          stageCount,
-          gateCount,
-        });
+    const parsed = DesignRecordSchema.safeParse(payload);
+    if (!parsed.success) {
+      return {
+        markdown:
+          `# Assembly\n\n_Design record failed validation:_\n\n\`\`\`\n${parsed.error.message}\n\`\`\`\n`,
+        json: { error: "invalid design record", issues: parsed.error.issues },
+      };
+    }
 
-        const metaHandle = await context.writeResource(
-          "assembled-factory",
-          `assembled-factory-${safe}`,
-          {
-            factoryName: design.factoryName,
-            session: args.session,
-            stageCount,
-            gateCount,
-            yamlFile: `factory-yaml-${safe}`,
-            assembledAt,
-          },
-        );
-        return { dataHandles: [fileHandle, metaHandle] };
+    const design = parsed.data;
+    const definition = assembleDefinition(design);
+    return {
+      markdown: renderMarkdown(design, definition),
+      // The machine-facing artifact: the target factory's definition object,
+      // ready to write as globalArguments + reports. No serialisation library.
+      json: {
+        factoryName: design.factoryName,
+        stageCount: design.stages.length,
+        gateCount: countGates(design),
+        definition,
       },
-    },
+    };
   },
 };

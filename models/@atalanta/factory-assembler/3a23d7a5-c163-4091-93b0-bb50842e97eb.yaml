@@ -1,9 +1,0 @@
-type: '@atalanta/factory-assembler'
-typeVersion: 2026.07.04.1
-id: 3a23d7a5-c163-4091-93b0-bb50842e97eb
-name: assembler
-version: 1
-tags: {}
-globalArguments:
-  interviewFactory: factory-design
-methods: {}

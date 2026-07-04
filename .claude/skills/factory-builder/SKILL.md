@@ -44,25 +44,22 @@ do not deliberate, do not read source to "understand" it first.
 ```
 swamp extension pull @atalanta/factory-assembler
 swamp extension pull @atalanta/external-reviewer
-swamp model create @atalanta/factory-assembler assembler
 swamp model create @swamp/software-factory factory-design
 ```
 
-The `factory-assembler` pull brings this skill, the assembler model, and the
-interview template `factory-design.definition.yaml`. After the two `create`s:
+The `factory-assembler` pull brings this skill, the assembler REPORT (auto-loaded
+— no model instance to create), and the interview template
+`factory-design.definition.yaml`. After the `create`:
 
-1. Set the `assembler` instance's `globalArguments` to
-   `{ interviewFactory: factory-design }` (edit its
-   `models/@atalanta/factory-assembler/<uuid>.yaml`).
-2. Copy the template into the `factory-design` instance: the template file is a
+1. Copy the template into the `factory-design` instance: the template file is a
    complete definition body; write its `globalArguments` + `reports` blocks into
    `models/@swamp/software-factory/<uuid>.yaml` (the one named `factory-design`),
    replacing `globalArguments: {}`, keeping the minted header and trailing
    `methods: {}`. The template ships at
    `.swamp/pulled-extensions/@atalanta/factory-assembler/templates/factory-design.definition.yaml`.
    This is one mechanical copy — not authoring.
-3. `swamp model method run factory-design validate` — must report valid. If not,
-   the copy in step 2 is wrong; fix it against the template, do not improvise.
+2. `swamp model method run factory-design validate` — must report valid. If not,
+   the copy in step 1 is wrong; fix it against the template, do not improvise.
 
 Then go to B.
 
@@ -184,43 +181,52 @@ type+config for anything uncommon. The intents the assembler knows:
 Keep `rework` back-edges gateless. Record `gate-design` with a `transitions[]`
 of `{stageId, name, to, gateIntents[]}`.
 
-### Phase 6 — assembly (deterministic; artifact: `design`, method: assembler)
+### Phase 6 — assembly (deterministic; artifact: `design`)
 
 1. **Consolidate** the five phase artifacts into one `design` artifact — the
-   full `DesignRecord` the assembler reads. Query each phase artifact's payload
+   full `DesignRecord` the assembler report reads. Query each phase artifact's
+   payload
    (`swamp data query 'modelName=="factory-design" && name=="artifact-<session>-<phase>-design"' --select attributes.payload`)
-   and compose them into the DesignRecord shape (see the assembler's
-   `DesignRecordSchema`: `factoryName`, `stages[]` with per-stage
-   `workMode/skills/systemPrompt/artifacts/evidence/transitions`,
-   `globalTransitions[]`). Fill the free-form fields the interview captured
-   (stage `systemPrompt`s, lens skill names) directly into the record — they are
-   evidence, not improvised at assembly.
-2. `record_artifact name=design payload='<the DesignRecord>'`.
-3. `record_dispatch` then let the stage run `assembler.build` (mode: method); it
-   reads the `design` artifact and writes the target factory YAML as a file
-   output. Record the `assembly-run` outcome `{status:"succeeded",runId:"…"}`.
+   and compose them into the DesignRecord shape: `factoryName`, `stages[]` with
+   per-stage `workMode/skills/systemPrompt/artifacts/evidence/transitions` (each
+   transition's gates as `{intent: …}` or `{raw: {type, config}}`),
+   `globalTransitions[]`, and the `author`/`adversary` polarity. Fill the
+   free-form fields the interview captured (stage `systemPrompt`s, lens skill
+   names) directly into the record — they are evidence, not improvised now.
+2. `record_dispatch`, then `record_artifact name=design payload='<the DesignRecord>'`.
+   Recording `design` **fires the `@atalanta/factory-assembler` report** — it
+   validates the record and emits the target factory definition as json. No
+   method to run, no assembler instance.
+3. Read the report's json (the assembled definition):
+   `swamp data query 'modelName=="factory-design" && name=="report-<...>-@atalanta_factory-assembler"' --select attributes.json`
+   — or fetch it via `swamp report get` / `swamp report search`. If the report's
+   json carries an `error` (invalid design record), fix the `design` artifact and
+   re-record; do not hand-write the definition.
 4. `advance transition=assembled`.
 
-The consolidation is the one place you shape data by hand; the assembler is the
-deterministic projection. Keep judgement in the recorded fields, not in the YAML
-rendering.
+The consolidation is the one place you shape data by hand; the report is the
+deterministic projection. Keep judgement in the recorded design fields.
 
 ### Phase 7 — confirm (human)
 
-Fetch the rendered YAML from the assembler's file output and render the target's
-Mermaid, present both to the human (the record, not your memory of it). On their
-explicit "go": `approve gateId=design-confirm actor=<who>`, then
+Present the assembled definition (the assembler report's `json.definition`) and,
+if useful, the target's rendered Mermaid — the record, not your memory of it. On
+the human's explicit "go": `approve gateId=design-confirm actor=<who>`, then
 `advance transition=confirmed`. Never approve on their behalf.
 
 ## After the interview: install the target factory
 
-The interview produced the target factory YAML as a file artifact on the
-`assembler` model — evidence, not a live definition. Installing it is a separate,
-explicit step (swamp's source/runtime split — a model writes data, not source):
+The interview produced the target factory definition as the assembler report's
+`json.definition` — evidence, not a live factory. Installing it is a separate,
+explicit step (swamp's source/runtime split — the report produces data, you turn
+it into source):
 
 ```
 swamp model create @swamp/software-factory <factoryName>
-# then write the rendered YAML into models/@swamp/software-factory/<uuid>.yaml
+# write the report's json.definition (globalArguments + reports) into
+# models/@swamp/software-factory/<uuid>.yaml under the minted header, keeping
+# the trailing methods: {}. The definition is a JSON object; render it as the
+# YAML body with your file tools (swamp reads either, but the repo convention is YAML).
 swamp model method run <factoryName> validate
 swamp model method run <factoryName> describe   # show the human the Mermaid
 ```

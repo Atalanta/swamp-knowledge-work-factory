@@ -5,10 +5,9 @@
  * software-factory grammar expects.
  */
 import { assertEquals, assertThrows } from "jsr:@std/assert@1";
-import { parse as parseYaml } from "npm:yaml@2.8.3";
 import {
   assembleDefinition,
-  assembleYaml,
+  countGates,
   type DesignRecord,
   DesignRecordSchema,
   expandGates,
@@ -139,12 +138,11 @@ Deno.test("assembleDefinition: renders the review stage's expanded gate stack", 
   assertEquals(accept.gates.map((g) => g.type), ["artifact-fresh", "findings-clear", "cel"]);
 });
 
-Deno.test("assembleYaml: round-trips to a well-formed SF definition shape", () => {
-  const yaml = assembleYaml(REVIEWED_DOCUMENT);
-  const parsed = parseYaml(yaml) as {
+Deno.test("assembleDefinition: produces a well-formed SF definition object", () => {
+  const def = assembleDefinition(REVIEWED_DOCUMENT) as {
     globalArguments: { stages: Array<Record<string, unknown>>; globalTransitions: unknown[] };
   };
-  const stages = parsed.globalArguments.stages;
+  const stages = def.globalArguments.stages;
   // exactly one initial, at least one terminal
   assertEquals(stages.filter((s) => s.initial === true).length, 1);
   assertEquals(stages.filter((s) => s.terminal === true).length >= 1, true);
@@ -161,4 +159,11 @@ Deno.test("assembleYaml: round-trips to a well-formed SF definition shape", () =
   assertEquals(review.artifacts[0].kind, "findings");
   assertEquals(review.artifacts[0].reviews, "document");
   assertEquals(review.artifacts[0].schema, undefined);
+});
+
+Deno.test("countGates: counts expanded gates across stages + globals", () => {
+  // review.accept: review-clear(2) + coverage-contract(1) = 3; other transitions
+  // 1 each: start-drafting(1) + submit(1) + ship(1) + rework/send-back(0) +
+  // global abort(1) = 3 + 1 + 1 + 1 + 1 = 7
+  assertEquals(countGates(REVIEWED_DOCUMENT), 7);
 });
