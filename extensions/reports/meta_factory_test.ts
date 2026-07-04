@@ -208,6 +208,65 @@ Deno.test("countGates: counts expanded gates across stages + globals", () => {
   assertEquals(countGates(REVIEWED_DOCUMENT), 7);
 });
 
+/** Build a minimal design with one dispatch+findings review stage. */
+function reviewDesign(
+  adversary: string | undefined,
+): DesignRecord {
+  return DesignRecordSchema.parse({
+    factoryName: "rev",
+    adversary,
+    stages: [
+      {
+        id: "draft",
+        initial: true,
+        workMode: "interactive",
+        artifacts: [{ name: "doc", kind: "regular", fields: [{ name: "body", type: "string", required: true }] }],
+        transitions: [{ name: "submit", to: "review", gates: [{ intent: "artifact-present", artifact: "doc" }] }],
+      },
+      {
+        id: "review",
+        workMode: "dispatch",
+        systemPrompt: "Review the doc.",
+        artifacts: [{ name: "doc-review", kind: "findings", reviews: "doc" }],
+        transitions: [
+          { name: "accept", to: "done", gates: [{ intent: "review-clear", artifact: "doc-review" }] },
+          { name: "rework", to: "draft" },
+        ],
+      },
+      { id: "done", terminal: true },
+    ],
+  });
+}
+
+Deno.test("renderStage: external adversary wires the review stage to external-reviewer", () => {
+  const def = assembleDefinition(reviewDesign("codex")) as {
+    globalArguments: { stages: Array<{ id: string; work?: { systemPrompt?: string } }> };
+  };
+  const review = def.globalArguments.stages.find((s) => s.id === "review")!;
+  const prompt = review.work!.systemPrompt!;
+  // keeps the author's prompt AND appends the external-reviewer instruction
+  assertEquals(prompt.includes("Review the doc."), true);
+  assertEquals(prompt.includes("external-review-findings"), true);
+  assertEquals(prompt.includes("adversary = codex"), true);
+});
+
+Deno.test("renderStage: claude adversary leaves the review stage same-context", () => {
+  const def = assembleDefinition(reviewDesign("claude")) as {
+    globalArguments: { stages: Array<{ id: string; work?: { systemPrompt?: string } }> };
+  };
+  const review = def.globalArguments.stages.find((s) => s.id === "review")!;
+  // author prompt unchanged, no external-reviewer instruction
+  assertEquals(review.work!.systemPrompt, "Review the doc.");
+});
+
+Deno.test("renderStage: no adversary set leaves the review stage same-context", () => {
+  const def = assembleDefinition(reviewDesign(undefined)) as {
+    globalArguments: { stages: Array<{ id: string; work?: { systemPrompt?: string } }> };
+  };
+  const review = def.globalArguments.stages.find((s) => s.id === "review")!;
+  assertEquals(review.work!.systemPrompt, "Review the doc.");
+});
+
 Deno.test("assertUniqueDeclarations: passes a well-formed design", () => {
   // REVIEWED_DOCUMENT declares each artifact/evidence once — no throw.
   assertUniqueDeclarations(REVIEWED_DOCUMENT);

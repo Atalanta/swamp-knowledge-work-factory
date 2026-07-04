@@ -140,12 +140,13 @@ export const DesignRecordSchema = z.object({
   globalTransitions: z.array(GlobalTransitionSpecSchema).default([]),
   // Whether to scope the work-item-summary report (recommended default true).
   scopeSummaryReport: z.boolean().default(true),
-  // Polarity — who authors vs who adversarially reviews. The factory YAML is
-  // polarity-neutral (it names a reviewer INSTANCE, not a provider), so these
-  // do not affect the rendered definition. They are carried through as evidence
-  // of the intended polarity and drive how the builder scaffolds the
-  // external-reviewer instance (defaultProvider = adversary). Reversing later is
-  // a one-field edit on that instance, not a re-assembly.
+  // Polarity — who authors vs who adversarially reviews. An EXTERNAL adversary
+  // (not claude) makes the assembler append the external-reviewer transport
+  // instruction to each review stage (see renderStage), so a review runs an
+  // independent context-isolated reviewer rather than same-context subagents;
+  // adversary=claude/unset leaves review same-context. The reviewer MODEL
+  // instance (defaultProvider = adversary) is scaffolded by the factory-builder
+  // skill on install; reversing polarity later is a one-field edit on it.
   author: z.enum(["claude", "codex", "gemini", "opencode", "amp"]).optional(),
   adversary: z.enum(["claude", "codex", "gemini", "opencode", "amp"])
     .optional(),
@@ -281,9 +282,56 @@ function renderArtifact(
   return entry;
 }
 
+/** The polarity a review stage is wired at (from the design's adversary field). */
+interface Polarity {
+  adversary?: string;
+  adversaryModel?: string;
+}
+
+/**
+ * A dispatch stage that records a `kind: findings` artifact is a review stage.
+ * That is the structural signature the assembler keys on to decide review
+ * transport — there is no separate "review" mode in the SF grammar.
+ */
+function isReviewStage(s: z.infer<typeof StageSpecSchema>): boolean {
+  return s.workMode === "dispatch" &&
+    s.artifacts.some((a) => a.kind === "findings");
+}
+
+/**
+ * Build the external-reviewer transport instruction appended to a review
+ * stage's systemPrompt when the design's adversary is an EXTERNAL provider (not
+ * claude). This is what makes the recorded polarity real: the produced factory's
+ * driver is told to run @atalanta/external-reviewer's external-review-findings
+ * bridge with the chosen adversary — an independent, context-isolated reviewer —
+ * one pass per lens, rather than spawning same-context subagents. The reviewer
+ * MODEL instance (defaultProvider = adversary) is scaffolded by the
+ * factory-builder skill when the factory is installed.
+ */
+function externalReviewInstruction(
+  reviewArtifact: string,
+  p: Polarity,
+): string {
+  const model = p.adversaryModel ? ` (${p.adversaryModel})` : "";
+  return [
+    ``,
+    `EXTERNAL REVIEW (polarity: adversary = ${p.adversary}${model}). Do NOT`,
+    `review from your own context. Run @atalanta/external-reviewer's`,
+    `external-review-findings workflow — reviewerModel=external-reviewer,`,
+    `factoryName=<this factory>, workItem=<ref>, artifact=${reviewArtifact},`,
+    `cwd=. — once per lens, feeding each lens file as the prompt. The reviewer`,
+    `reads the subject from swamp itself and returns findings JSON; merge the`,
+    `passes into one record_artifact for "${reviewArtifact}" with the lenses'`,
+    `stable id prefixes. The external-reviewer + @mgreten/cli-agent extensions`,
+    `and an "external-reviewer" cli-agent instance (defaultProvider: ${p.adversary})`,
+    `must be present — the factory-builder skill scaffolds them on install.`,
+  ].join("\n");
+}
+
 /** Render one stage into its SF definition entry. */
 function renderStage(
   s: z.infer<typeof StageSpecSchema>,
+  polarity: Polarity,
 ): Record<string, unknown> {
   const entry: Record<string, unknown> = { id: s.id };
   if (s.description !== undefined) entry.description = s.description;
@@ -296,7 +344,21 @@ function renderStage(
   if (s.workMode !== undefined) {
     const work: Record<string, unknown> = { mode: s.workMode };
     if (s.skills.length > 0) work.skills = s.skills;
-    if (s.systemPrompt !== undefined) work.systemPrompt = s.systemPrompt;
+    // A review stage whose adversary is external gets the external-reviewer
+    // transport instruction appended, so the recorded polarity actually drives
+    // the produced factory's review. adversary=claude (or unset) leaves it as
+    // same-context dispatch (the documented fallback).
+    const wantsExternal = isReviewStage(s) &&
+      polarity.adversary !== undefined && polarity.adversary !== "claude";
+    if (wantsExternal) {
+      const reviewArtifact = s.artifacts.find((a) =>
+        a.kind === "findings"
+      )!.name;
+      work.systemPrompt = (s.systemPrompt ?? "") +
+        externalReviewInstruction(reviewArtifact, polarity);
+    } else if (s.systemPrompt !== undefined) {
+      work.systemPrompt = s.systemPrompt;
+    }
     if (s.constraints !== undefined) work.constraints = s.constraints;
     entry.work = work;
   }
@@ -357,8 +419,12 @@ export function assembleDefinition(
   design: DesignRecord,
 ): Record<string, unknown> {
   assertUniqueDeclarations(design);
+  const polarity: Polarity = {
+    adversary: design.adversary,
+    adversaryModel: design.adversaryModel,
+  };
   const globalArguments: Record<string, unknown> = {
-    stages: design.stages.map(renderStage),
+    stages: design.stages.map((s) => renderStage(s, polarity)),
   };
   if (design.globalTransitions.length > 0) {
     globalArguments.globalTransitions = design.globalTransitions.map((gt) => {

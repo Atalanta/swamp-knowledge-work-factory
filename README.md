@@ -140,18 +140,21 @@ constraints/
   drafting-conventions.md   author-side counterpart to the review lenses
 ```
 
-## Known limitations
+## Polarity and known limitations
 
-- **Polarity is captured but not yet auto-wired.** The interview records
-  `reviewer` / `author` / `adversary`, and the assembler renders a review stage
-  in the `workMode` the design gives it. It does **not** yet translate
-  `reviewer: external` into an `@atalanta/external-reviewer`-wired stage — so a
-  dispatch-mode review stage runs same-context Claude subagents, and the "codex
-  adversary" is nominal until you switch that stage to the external reviewer
-  yourself (a bounded change: point the review stage at the external-reviewer
-  bridge and scaffold the reviewer instance, per the `factory-builder` skill's
-  "scaffold the reviewer instance" section). Making the assembler emit the
-  external-reviewer wiring from the recorded polarity is the next feature.
+**Polarity is wired from the recorded adversary.** When a design's `adversary`
+is an external provider (e.g. `codex`), the assembler appends the
+`@atalanta/external-reviewer` transport instruction to each review stage (a
+`dispatch` stage recording a `kind: findings` artifact): the produced factory's
+driver runs the external-review bridge with that adversary — an independent,
+context-isolated reviewer — instead of same-context subagents. `adversary:
+claude` (or unset) leaves the review stage same-context (the fallback). The
+`factory-builder` skill scaffolds the `@mgreten/cli-agent` reviewer instance
+(`defaultProvider: <adversary>`) when it installs the factory; reversing polarity
+later is a one-field edit on that instance.
+
+Known limitations:
+
 - **Artifact/evidence names are global to a run.** Declare each once on its
   producing stage; re-record it in place on later stages, don't re-declare it.
   The assembler now fails loudly (`assembleDefinition` throws, the report returns
