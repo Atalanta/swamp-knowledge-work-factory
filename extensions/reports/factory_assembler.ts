@@ -519,7 +519,21 @@ export const report = {
     }
 
     const design = parsed.data;
-    const definition = assembleDefinition(design);
+    // assembleDefinition/expandGates throw on a semantically malformed gate (an
+    // intent missing its required field, or an unknown intent). Catch it so a bad
+    // design record returns the same clean {error} shape as the parse/validation
+    // paths above, rather than throwing uncaught out of the report.
+    let definition: Record<string, unknown>;
+    try {
+      definition = assembleDefinition(design);
+    } catch (e) {
+      return {
+        markdown: `# Assembly\n\n_Could not assemble the definition: ${
+          String(e)
+        }._\n`,
+        json: { error: "assembly failed", detail: String(e), workItem },
+      };
+    }
     return {
       markdown: renderMarkdown(design, definition),
       // The machine-facing artifact: the target factory's definition object,

@@ -1,8 +1,10 @@
 /**
- * Tests for the pure assembler transform. These exercise the intent->grammar
- * ruleset (expandGates) and the full design-record -> YAML projection without
- * any swamp runtime, then re-parse the YAML to assert it is the shape the
- * software-factory grammar expects.
+ * Tests for the pure assembler transform — the intent->grammar ruleset
+ * (expandGates), the design-record -> definition-object projection
+ * (assembleDefinition), and the gate count (countGates). These run without any
+ * swamp runtime; the report's execute() shell (guard + repository read + the
+ * {error} failure shapes) is exercised in-swamp against the factory-design
+ * interview, not here.
  */
 import { assertEquals, assertThrows } from "jsr:@std/assert@1";
 import {
@@ -49,6 +51,43 @@ Deno.test("expandGates: unknown intent throws (no silent skip)", () => {
 
 Deno.test("expandGates: intent missing its required param throws", () => {
   assertThrows(() => expandGates({ intent: "review-clear" }), Error, "requires `artifact`");
+});
+
+Deno.test("expandGates: workflow-ok expands to workflow-succeeded", () => {
+  assertEquals(expandGates({ intent: "workflow-ok", workflow: "@acme/test-suite" }), [
+    { type: "workflow-succeeded", config: { workflow: "@acme/test-suite" } },
+  ]);
+});
+
+Deno.test("expandGates: test-failed expands to evidence-recorded with status=failed", () => {
+  assertEquals(expandGates({ intent: "test-failed", evidence: "test-run" }), [
+    { type: "evidence-recorded", config: { name: "test-run", requireField: { status: "failed" } } },
+  ]);
+});
+
+Deno.test("expandGates: workflow-ok / test-failed missing their param throw", () => {
+  assertThrows(() => expandGates({ intent: "workflow-ok" }), Error, "requires `workflow`");
+  assertThrows(() => expandGates({ intent: "test-failed" }), Error, "requires `evidence`");
+});
+
+Deno.test("assembleDefinition: throws on a malformed gate (report.execute catches this)", () => {
+  // A design whose transition names an intent but omits its required field. The
+  // report's execute() wraps assembleDefinition in try/catch and returns an
+  // {error} json; here we assert the underlying transform fails loudly.
+  const bad = DesignRecordSchema.parse({
+    factoryName: "bad",
+    stages: [
+      {
+        id: "a",
+        initial: true,
+        workMode: "interactive",
+        // review-clear with no `artifact` — expandGates must throw
+        transitions: [{ name: "go", to: "done", gates: [{ intent: "review-clear" }] }],
+      },
+      { id: "done", terminal: true },
+    ],
+  });
+  assertThrows(() => assembleDefinition(bad), Error, "requires `artifact`");
 });
 
 /** A design record equivalent to the reviewed-document seed factory. */
