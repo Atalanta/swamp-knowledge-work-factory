@@ -38,26 +38,30 @@ swamp model search
 
 ### Setup (only when `factory-design` is absent)
 
-Run these commands as-is. This is fixed provisioning, not a design decision —
-do not deliberate, do not read source to "understand" it first.
+All extensions are already present: pulling `@atalanta/factory-assembler` (which
+loaded this skill) auto-resolves its manifest dependencies —
+`@swamp/software-factory`, `@atalanta/external-reviewer` (and `@mgreten/cli-agent`
+under it), `@atalanta/kw-review-lenses`, `@atalanta/vale-review`. **Do not run any
+`swamp extension pull` commands** — the dependency tree is declared, not scripted.
+
+The only thing that isn't an extension is the interview's model *instance* (model
+instances are created per-repo, never resolved by dependency). Create it once from
+the bundled template. This is fixed provisioning — do not deliberate, do not read
+source to "understand" it first:
 
 ```
-swamp extension pull @atalanta/factory-assembler
-swamp extension pull @atalanta/external-reviewer
 swamp model create @swamp/software-factory factory-design
 ```
 
-The `factory-assembler` pull brings this skill, the assembler REPORT (auto-loaded
-— no model instance to create), and the interview template
-`factory-design.definition.yaml`. After the `create`:
+Then:
 
-1. Copy the template into the `factory-design` instance: the template file is a
+1. Copy the bundled template into the created instance. The template is a
    complete definition body; write its `globalArguments` + `reports` blocks into
    `models/@swamp/software-factory/<uuid>.yaml` (the one named `factory-design`),
    replacing `globalArguments: {}`, keeping the minted header and trailing
    `methods: {}`. The template ships at
    `.swamp/pulled-extensions/@atalanta/factory-assembler/templates/factory-design.definition.yaml`.
-   This is one mechanical copy — not authoring.
+   One mechanical copy — not authoring.
 2. `swamp model method run factory-design validate` — must report valid. If not,
    the copy in step 1 is wrong; fix it against the template, do not improvise.
 

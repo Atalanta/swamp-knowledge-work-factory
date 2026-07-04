@@ -7,13 +7,12 @@ adversarial review, and a human sign-off the driver cannot self-satisfy.
 
 ## Fastest path: "build me a kw factory"
 
-Say that to a swamp-enabled agent in a repo that has these two extensions pulled,
-and the `factory-builder` skill runs a **structured interview** that designs a
-factory for your knowledge work and assembles a validated definition:
+One pull, then say that to a swamp-enabled agent; the `factory-builder` skill runs
+a **structured interview** that designs a factory for your knowledge work and
+assembles a validated definition:
 
 ```
-swamp extension pull @atalanta/factory-assembler   # brings the factory-builder skill + assembler + interview template
-swamp extension pull @atalanta/external-reviewer   # the external adversarial reviewer bridge
+swamp extension pull @atalanta/factory-assembler   # auto-resolves the whole tree (see Dependencies)
 # then, to the agent:  "build me a kw factory"
 ```
 
@@ -60,31 +59,31 @@ So copying the implementation would mean forking a generic engine to change
 nothing but its examples — a maintenance burden for zero behavioural gain, and
 you'd lose upstream fixes. This repo depends.
 
-## Dependencies (pull, don't vendor)
+## Dependencies (one pull, auto-resolved)
 
-Two groups. To **design a factory** (run the interview) you need the first two;
-`factory-assembler` auto-resolves `@swamp/software-factory`. The rest are what a
-**knowledge-work target factory** wires once designed — pull them when you drive
-the factory the interview produces, not to run the interview.
-
-| Extension | Role | Needed for |
-| --- | --- | --- |
-| `@atalanta/factory-assembler` | the factory-builder skill + assembler model + interview template | designing (the interview) |
-| `@atalanta/external-reviewer` | the external adversarial reviewer bridge (Claude drives, an external agent judges) | designing + running |
-| `@swamp/software-factory` | the engine (the model type every factory instantiates) | both (auto-resolved by factory-assembler) |
-| `@mgreten/cli-agent` | the external reviewer model type | running (auto-resolved by external-reviewer) |
-| `@atalanta/vale-review` | the deterministic prose linter for a gated `lint` stage | running (if the design lints) |
-| `@atalanta/kw-review-lenses` | the STRUCT/CRAFT/TONE prose review lenses | running (the review stage) |
+`@atalanta/factory-assembler` declares the whole tree in its manifest, so a
+single pull resolves everything (swamp resolves dependencies to depth 10 — you
+never issue the sub-pulls, and neither does the agent):
 
 ```
-# to design a factory (the interview):
 swamp extension pull @atalanta/factory-assembler
-swamp extension pull @atalanta/external-reviewer
-
-# additionally, to run a knowledge-work factory the interview produced:
-swamp extension pull @atalanta/vale-review
-swamp extension pull @atalanta/kw-review-lenses
 ```
+
+brings, automatically:
+
+| Extension | Role |
+| --- | --- |
+| `@atalanta/factory-assembler` | the `factory-builder` skill, the assembler report, the interview template |
+| `@swamp/software-factory` | the engine (the model type every factory instantiates) |
+| `@atalanta/external-reviewer` | the external adversarial reviewer bridge (Claude drives, an external agent judges) |
+| `@mgreten/cli-agent` | the external reviewer model type (under external-reviewer) |
+| `@atalanta/kw-review-lenses` | the STRUCT/CRAFT/TONE prose review lenses |
+| `@atalanta/vale-review` | the deterministic prose linter for a gated `lint` stage |
+
+The one thing a pull cannot bring is the interview's model *instance* (instances
+are created per-repo, never resolved by dependency) — the `factory-builder` skill
+creates it from the bundled template on first run. You run nothing; you answer the
+interview.
 
 ## The flow
 

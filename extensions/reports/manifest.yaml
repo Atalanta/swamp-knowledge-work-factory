@@ -52,4 +52,14 @@ labels:
   - factory-builder
   - knowledge-work
 dependencies:
+  # Resolved automatically on `swamp extension pull @atalanta/factory-assembler`
+  # (depth-10 resolution), so a consuming repo runs ONE pull and the agent never
+  # issues pull commands. @swamp/software-factory is the engine; the rest are what
+  # a knowledge-work factory (and the interview's own review stage) wire:
+  #   external-reviewer -> the adversarial reviewer bridge (pulls @mgreten/cli-agent)
+  #   kw-review-lenses  -> the STRUCT/CRAFT/TONE prose review lenses
+  #   vale-review       -> the deterministic prose linter for a gated lint stage
   - '@swamp/software-factory'
+  - '@atalanta/external-reviewer'
+  - '@atalanta/kw-review-lenses'
+  - '@atalanta/vale-review'
