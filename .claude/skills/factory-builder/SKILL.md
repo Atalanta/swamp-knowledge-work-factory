@@ -86,6 +86,16 @@ questions → record the phase artifact → `advance`. The phase gate is
 decisions are captured in the required shape. This is deliberate: the interview
 must produce structured decisions, not prose.
 
+**Ask ONE question at a time, and answer EVERY question in the phase before you
+record.** A phase's seed questions are a checklist, not a menu — the human is not
+multi-threaded and will answer the one in front of them. Do not batch several
+questions in one turn and move on when only one is answered. For each question,
+either capture the human's answer or, with their explicit say-so, mark it not
+needed (record the field as `"n/a"` or omit it only where the schema allows) —
+never silently skip it. Before recording the phase artifact, confirm back the
+full set of answers ("here's what I have for all N questions — right?") and
+record only once every question is answered or explicitly waived.
+
 Never invent answers. If the human is unsure, offer the canon's default (below)
 and record what they choose. Every decision is persisted; nothing stays only in
 conversation.

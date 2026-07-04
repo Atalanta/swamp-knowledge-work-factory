@@ -110,9 +110,11 @@ globalArguments:
         skills: [factory-builder]
       artifacts:
         - name: lens-design
+          # Every phase-4 question is a required field so a partial answer cannot
+          # satisfy artifact-exists and advance (adversaryModel stays optional).
           schema:
             type: object
-            required: [reviewer, lenses, author, adversary]
+            required: [reviewer, lenses, author, adversary, standards, mechanicalLinterFirst, maxReviewCycles]
             properties:
               reviewer: { type: string, enum: [external, dispatch] }
               author:

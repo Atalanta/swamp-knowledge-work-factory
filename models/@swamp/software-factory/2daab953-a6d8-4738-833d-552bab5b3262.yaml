@@ -141,9 +141,14 @@ globalArguments:
         skills: [factory-builder]
       artifacts:
         - name: lens-design
+          # Every question in this phase is a required field, so a partial answer
+          # cannot satisfy artifact-exists and advance. standards can be an empty
+          # array (explicit "none"); mechanicalLinterFirst / maxReviewCycles must
+          # carry an explicit choice. adversaryModel stays optional (a refinement
+          # of adversary, not a separate question).
           schema:
             type: object
-            required: [reviewer, lenses, author, adversary]
+            required: [reviewer, lenses, author, adversary, standards, mechanicalLinterFirst, maxReviewCycles]
             properties:
               reviewer:
                 type: string
