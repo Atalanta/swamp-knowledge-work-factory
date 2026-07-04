@@ -1,103 +1,81 @@
 ---
 name: factory-builder
 description: >-
-  Drive the factory-design interview: a structured, phase-by-phase conversation
-  that elicits the design of a @swamp/software-factory (a knowledge-work or code
-  factory) in the canon's vocabulary — domain, stages, artifacts/schemas, the
-  adversary/lenses, gates, cycles — persists each phase's decisions as a strict
-  swamp artifact, then assembles a validated factory definition from the
-  persisted record. Use when the user wants to design/build/scaffold a new
-  factory, "build me a factory", "design a knowledge-work factory", "run the
-  factory-design interview", or is at any phase of a factory-design run. This is
-  a CONSTRAINED interview, not an open chat: each phase has fixed seed questions
-  and a required artifact shape, and cannot advance until that artifact is
-  recorded.
+  Drive the factory-design interview to design a new factory. INVOKE THIS
+  IMMEDIATELY, before any swamp extension/model exploration, when the user says
+  any of: "build me a kw factory", "build me a factory", "build a knowledge-work
+  factory", "kw factory", "knowledge-work factory", "design a factory", "design a
+  knowledge-work factory", "scaffold a factory", "make me a factory", "run the
+  factory-design interview", or is at any phase of a factory-design run. It is a
+  structured, phase-by-phase conversation that elicits the design of a
+  @swamp/software-factory (knowledge-work or code) in the canon's vocabulary —
+  domain, stages, artifacts/schemas, adversary/lenses, gates, cycles — persists
+  each phase's decisions as a strict swamp artifact, then assembles a validated
+  factory definition from the persisted record. A CONSTRAINED interview, not an
+  open chat: each phase has fixed seed questions and a required artifact shape,
+  and cannot advance until that artifact is recorded. Do NOT try to discover what
+  a "kw factory" is via `swamp extension search` or by reading extension source —
+  this skill IS the definition; follow it.
 ---
 
 # Factory Builder
 
-Drive the `factory-design` interview factory. It designs another
-`@swamp/software-factory` by walking the design method from `docs/factory-method.md`
-as a phased conversation, persisting each phase's decisions as a schema-validated
-artifact, then assembling the target factory YAML deterministically from the
-persisted record.
+**You are here to run an interview, not to explore swamp.** Do NOT
+`swamp extension search`, do NOT read extension source, do NOT try to discover
+what a "kw factory" is. This skill is the whole definition. Do exactly two
+things, in order: (A) make sure the `factory-design` model exists — one check,
+setup only if missing; (B) start and drive the interview. Everything the human
+needs, you ask *inside* the interview.
 
-You are the generic software-factory driver (see the `software-factory` skill's
-drive loop) pointed at the `factory-design` instance. This skill adds the
-per-phase guidance: what to ask, and what shape to record.
-
-**Read `docs/factory-canon.md` (the grammar + composition patterns) and
-`docs/factory-method.md` (the three laws, the build order, the anti-patterns)
-before driving — they are the source of the seed questions and the standard you
-hold each answer to.**
-
-## Setup — do this yourself, ask the human for nothing
-
-The human should never create models or paste YAML. When you are triggered and
-the required models do not yet exist, stand them up from the bundled templates.
-Check first, then create only what is missing.
-
-**1. Are the models already here?** List them:
+## A. Is the interview ready? (one check)
 
 ```
 swamp model search
 ```
 
-If `factory-design` (@swamp/software-factory) and `assembler`
-(@atalanta/factory-assembler) both exist, skip to Start. Otherwise:
+- **If `factory-design` is listed** → go straight to section B. Do nothing else.
+- **If it is not listed** → run Setup once (below), then go to B.
 
-**2. Pull the dependencies** (idempotent — skip any already pulled):
+### Setup (only when `factory-design` is absent)
+
+Run these commands as-is. This is fixed provisioning, not a design decision —
+do not deliberate, do not read source to "understand" it first.
 
 ```
-swamp extension pull @swamp/software-factory
 swamp extension pull @atalanta/factory-assembler
 swamp extension pull @atalanta/external-reviewer
-swamp extension pull @mgreten/cli-agent
-```
-
-(Pre-publish: the human has already run `swamp extension source add <repo>` so
-these resolve from the local source. If a pull fails as unresolvable, tell the
-human to add the source; do not paste files as a workaround.)
-
-**3. Create the `assembler` instance and set its global arg:**
-
-```
 swamp model create @atalanta/factory-assembler assembler
-```
-
-Then edit the created file (find it under
-`models/@atalanta/factory-assembler/<uuid>.yaml`) so its `globalArguments` is:
-
-```yaml
-globalArguments:
-  interviewFactory: factory-design
-```
-
-**4. Create the `factory-design` interview instance and write its definition.**
-The definition body ships in the assembler extension at
-`templates/factory-design.definition.yaml`. Create the instance, then write that
-template's `globalArguments` + `reports` blocks into the created file (replacing
-its `globalArguments: {}`, keeping the `type/typeVersion/id/name/version/tags`
-header the `create` minted and the trailing `methods: {}`):
-
-```
 swamp model create @swamp/software-factory factory-design
 ```
 
-Read the bundled template (in this repo after pull, at
-`.swamp/pulled-extensions/@atalanta/factory-assembler/templates/factory-design.definition.yaml`,
-or `extensions/models/templates/factory-design.definition.yaml` in the source
-repo) and write it into the instance file with your file-editing tools. Do this
-mechanically — it is a fixed transcription, not a judgement.
+The `factory-assembler` pull brings this skill, the assembler model, and the
+interview template `factory-design.definition.yaml`. After the two `create`s:
 
-**5. Validate before driving:**
+1. Set the `assembler` instance's `globalArguments` to
+   `{ interviewFactory: factory-design }` (edit its
+   `models/@atalanta/factory-assembler/<uuid>.yaml`).
+2. Copy the template into the `factory-design` instance: the template file is a
+   complete definition body; write its `globalArguments` + `reports` blocks into
+   `models/@swamp/software-factory/<uuid>.yaml` (the one named `factory-design`),
+   replacing `globalArguments: {}`, keeping the minted header and trailing
+   `methods: {}`. The template ships at
+   `.swamp/pulled-extensions/@atalanta/factory-assembler/templates/factory-design.definition.yaml`.
+   This is one mechanical copy — not authoring.
+3. `swamp model method run factory-design validate` — must report valid. If not,
+   the copy in step 2 is wrong; fix it against the template, do not improvise.
 
-```
-swamp model method run factory-design validate
-```
+Then go to B.
 
-Must report valid. If it does not, the transcription in step 4 is wrong — fix it
-against the template; do not improvise the definition.
+## B. Start and drive the interview
+
+The interview is the point. `docs/factory-canon.md` (grammar + patterns) and
+`docs/factory-method.md` (laws, build order, anti-patterns) are the source of the
+seed questions and the standard you hold each answer to — consult them as you
+drive, but do not let setup or reading delay starting.
+
+You are the generic software-factory driver (see the `software-factory` skill's
+drive loop) pointed at the `factory-design` instance; this skill adds the
+per-phase questions and record shapes below.
 
 ## The loop (per phase)
 

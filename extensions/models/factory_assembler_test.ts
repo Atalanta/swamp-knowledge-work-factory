@@ -5,7 +5,7 @@
  * software-factory grammar expects.
  */
 import { assertEquals, assertThrows } from "jsr:@std/assert@1";
-import { parse as parseYaml } from "npm:yaml@2.6.1";
+import { parse as parseYaml } from "npm:yaml@2.8.3";
 import {
   assembleDefinition,
   assembleYaml,

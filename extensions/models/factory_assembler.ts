@@ -25,7 +25,7 @@
  * @module
  */
 import { z } from "npm:zod@4";
-import { stringify as stringifyYaml } from "npm:yaml@2.6.1";
+import { stringify as stringifyYaml } from "npm:yaml@2.8.3";
 
 // ---------------------------------------------------------------------------
 // Design-record shapes — the structured mirror of the interview's artifacts.
@@ -142,7 +142,8 @@ export const DesignRecordSchema = z.object({
   // external-reviewer instance (defaultProvider = adversary). Reversing later is
   // a one-field edit on that instance, not a re-assembly.
   author: z.enum(["claude", "codex", "gemini", "opencode", "amp"]).optional(),
-  adversary: z.enum(["claude", "codex", "gemini", "opencode", "amp"]).optional(),
+  adversary: z.enum(["claude", "codex", "gemini", "opencode", "amp"])
+    .optional(),
   adversaryModel: z.string().optional(),
 });
 
@@ -276,7 +277,9 @@ function renderArtifact(
 }
 
 /** Render one stage into its SF definition entry. */
-function renderStage(s: z.infer<typeof StageSpecSchema>): Record<string, unknown> {
+function renderStage(
+  s: z.infer<typeof StageSpecSchema>,
+): Record<string, unknown> {
   const entry: Record<string, unknown> = { id: s.id };
   if (s.description !== undefined) entry.description = s.description;
   if (s.initial) entry.initial = true;
@@ -382,7 +385,9 @@ type MethodContext = {
   createFileWriter: (
     specName: string,
     instanceName: string,
-  ) => Promise<{ writeText: (text: string) => Promise<Record<string, unknown>> }>;
+  ) => Promise<
+    { writeText: (text: string) => Promise<Record<string, unknown>> }
+  >;
 };
 
 /**
@@ -469,8 +474,7 @@ export const model = {
 
         const stageCount = design.stages.length;
         const gateCount = design.stages.reduce(
-          (n, s) =>
-            n + s.transitions.reduce((m, t) => m + t.gates.length, 0),
+          (n, s) => n + s.transitions.reduce((m, t) => m + t.gates.length, 0),
           design.globalTransitions.reduce((m, gt) => m + gt.gates.length, 0),
         );
 

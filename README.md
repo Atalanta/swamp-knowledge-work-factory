@@ -5,16 +5,38 @@ decision records, research briefs — through a `@swamp/software-factory` with t
 same rigor a code factory gets: staged flow, mechanical linting, external
 adversarial review, and a human sign-off the driver cannot self-satisfy.
 
-It ships three things:
+## Fastest path: "build me a kw factory"
 
-1. **A seed factory definition** — `models/@swamp/software-factory/` — a generic
-   *reviewed-document* flow you instantiate and specialise. Not a domain factory;
-   a teaching template.
-2. **The `kw-review-lenses` skill** — `extensions/skills/kw-review-lenses/` — the
-   prose analogue of `@atalanta/ts-review-lenses`: structure / craft / tone
-   review lenses for documents, publishable as `@atalanta/kw-review-lenses`.
-3. **The canon and the method** — `docs/` — how factories compose (the grammar)
-   and how to build a rigorous one (the opinionated method).
+Say that to a swamp-enabled agent in a repo that has these two extensions pulled,
+and the `factory-builder` skill runs a **structured interview** that designs a
+factory for your knowledge work and assembles a validated definition:
+
+```
+swamp extension pull @atalanta/factory-assembler   # brings the factory-builder skill + assembler + interview template
+swamp extension pull @atalanta/external-reviewer   # the external adversarial reviewer bridge
+# then, to the agent:  "build me a kw factory"
+```
+
+The interview walks seven phases (domain → stages → artifacts/schemas →
+adversary/lenses → gates → assembly → confirm), persists every decision as
+schema-validated swamp data, and ends by deterministically rendering the target
+factory YAML. The agent stands up the interview models itself on first run — you
+do no typing or pasting; you answer the interview.
+
+## What this repo ships
+
+1. **`@atalanta/factory-assembler`** — the factory-builder skill (the interview
+   driver), the deterministic assembler model that renders a design record into
+   factory YAML, and the bundled `factory-design` interview template.
+2. **`@atalanta/kw-review-lenses`** — the prose analogue of
+   `@atalanta/ts-review-lenses`: structure / craft / tone review lenses a
+   knowledge-work factory's review stage wires.
+3. **Seed factories** — `reviewed-document` and `runbook` under
+   `models/@swamp/software-factory/` — worked examples the interview can produce;
+   instantiate directly if you want a starting point rather than a fresh design.
+4. **The canon and the method** — `docs/factory-canon.md` (how factories compose:
+   grammar + patterns) and `docs/factory-method.md` (the opinionated method: the
+   three laws, the rigor ladder, the build order, the anti-patterns).
 
 ## Depend, don't copy
 
@@ -40,17 +62,26 @@ you'd lose upstream fixes. This repo depends.
 
 ## Dependencies (pull, don't vendor)
 
-| Extension | Role |
-| --- | --- |
-| `@swamp/software-factory` | the engine (the model type this factory instantiates) |
-| `@atalanta/external-reviewer` | the polarity-reversal review workflow (Claude drives, an external agent judges) |
-| `@atalanta/vale-review` | the deterministic prose linter for the gated `lint` stage |
-| `@mgreten/cli-agent` | the external reviewer model type |
-| `@atalanta/kw-review-lenses` | the STRUCT/CRAFT/TONE prose lenses (shipped from this repo) |
+Two groups. To **design a factory** (run the interview) you need the first two;
+`factory-assembler` auto-resolves `@swamp/software-factory`. The rest are what a
+**knowledge-work target factory** wires once designed — pull them when you drive
+the factory the interview produces, not to run the interview.
+
+| Extension | Role | Needed for |
+| --- | --- | --- |
+| `@atalanta/factory-assembler` | the factory-builder skill + assembler model + interview template | designing (the interview) |
+| `@atalanta/external-reviewer` | the external adversarial reviewer bridge (Claude drives, an external agent judges) | designing + running |
+| `@swamp/software-factory` | the engine (the model type every factory instantiates) | both (auto-resolved by factory-assembler) |
+| `@mgreten/cli-agent` | the external reviewer model type | running (auto-resolved by external-reviewer) |
+| `@atalanta/vale-review` | the deterministic prose linter for a gated `lint` stage | running (if the design lints) |
+| `@atalanta/kw-review-lenses` | the STRUCT/CRAFT/TONE prose review lenses | running (the review stage) |
 
 ```
-swamp extension pull @swamp/software-factory
+# to design a factory (the interview):
+swamp extension pull @atalanta/factory-assembler
 swamp extension pull @atalanta/external-reviewer
+
+# additionally, to run a knowledge-work factory the interview produced:
 swamp extension pull @atalanta/vale-review
 swamp extension pull @atalanta/kw-review-lenses
 ```
