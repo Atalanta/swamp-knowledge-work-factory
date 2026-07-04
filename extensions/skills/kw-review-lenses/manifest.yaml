@@ -1,0 +1,50 @@
+manifestVersion: 1
+name: '@atalanta/kw-review-lenses'
+version: 2026.07.04.1
+description: |
+  Three adversarial knowledge-work (prose/document) review prompts ("lenses")
+  for an independent reviewer in a @swamp/software-factory run. The prose analogue
+  of @atalanta/ts-review-lenses — these review documents, not code.
+
+  - Lens A (structure) — mode purity (Diataxis), information architecture,
+    one-piece-one-purpose, no orphaned sections.
+  - Lens B (craft vs reality) — every claim traces to a source, completeness
+    against a coverage contract, no fabrication, no silently-passed gap.
+  - Lens C (tone) — terseness, house voice, no hedging/throat-clearing/
+    self-narration, register per mode.
+
+  Run as three separate passes (STRUCT-/CRAFT-/TONE- finding id prefixes keep
+  them distinct). The lens files are transport-neutral review prose; the swamp +
+  findings-JSON contract is appended at run time. Craft (B) outranks tone (C).
+
+  ## Use
+
+  Pull this extension, then feed a lens as the `prompt` input to
+  @atalanta/external-reviewer's external-review-findings workflow (optional
+  companion — not a hard dependency), one invocation per lens. The bundled
+  kw-review-lenses skill prints the exact wiring. A factory wanting same-context
+  review instead uses the lenses as dispatch-stage systemPrompts. Run a
+  deterministic prose linter (e.g. @atalanta/vale-review) in a gated stage first.
+
+  ```
+  swamp extension pull @atalanta/kw-review-lenses
+  # then invoke the bundled `kw-review-lenses` skill
+  ```
+repository: 'https://github.com/Atalanta/swamp-knowledge-work-factory'
+models: []
+workflows: []
+vaults: []
+drivers: []
+datastores: []
+reports: []
+skills:
+  - kw-review-lenses
+additionalFiles:
+  - README.md
+  - LICENSE.txt
+labels:
+  - software-factory
+  - adversarial-review
+  - knowledge-work
+  - documentation
+dependencies: []

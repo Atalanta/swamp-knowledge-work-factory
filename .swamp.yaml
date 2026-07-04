@@ -1,0 +1,9 @@
+swampVersion: 20260626.005336.0
+initializedAt: '2026-07-04T07:07:55.726Z'
+repoId: f532598b-7cd5-4459-ab88-3f27f8abbf16
+tools:
+  - claude
+gitignoreManaged: true
+trustedCollectives:
+  - swamp
+  - atalanta

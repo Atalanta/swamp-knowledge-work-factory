@@ -1,0 +1,13 @@
+type: '@mgreten/cli-agent'
+typeVersion: 2026.06.27.2
+id: ebbe8a25-47fb-4136-a310-8c6ea6e3ae2e
+name: external-reviewer
+version: 1
+tags: {}
+globalArguments:
+  defaultProvider: codex
+  defaultModel: gpt-5.5
+  codexPath: codex
+  wallTimeoutMs: 900000
+  maxRetries: 1
+methods: {}

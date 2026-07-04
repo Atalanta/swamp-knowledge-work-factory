@@ -1,0 +1,9 @@
+type: '@atalanta/vale-review'
+typeVersion: 2026.07.01.1
+id: 84ad1b04-e312-4511-b465-5337ee3b80a2
+name: vale
+version: 1
+tags: {}
+globalArguments:
+  configPath: .vale.ini
+methods: {}

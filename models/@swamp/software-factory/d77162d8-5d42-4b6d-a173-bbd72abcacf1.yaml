@@ -1,0 +1,228 @@
+type: '@swamp/software-factory'
+typeVersion: 2026.06.24.1
+id: d77162d8-5d42-4b6d-a173-bbd72abcacf1
+name: reviewed-document
+version: 1
+tags: {}
+# The generic knowledge-work factory: a reviewed-document flow.
+#
+#   brief -> drafting -> lint (Vale, gated) -> review (STRUCT/CRAFT/TONE, external)
+#         -> sign-off (human) -> done
+#   with rework back to drafting from lint and review, an escalate short of
+#   abort, and a global abort.
+#
+# This is a TEACHING template, not a domain factory. It is domain-agnostic on
+# purpose: specialise it by editing the brief/draft schemas, the coverage
+# contract, and the lens set. See docs/factory-canon.md (grammar) and
+# docs/factory-method.md (the opinionated method) for how and why.
+#
+# Depends on (pull these; do not vendor):
+#   @swamp/software-factory      the engine (this model type)
+#   @atalanta/external-reviewer  the polarity-reversal review workflow
+#   @atalanta/vale-review        the deterministic prose linter (lint stage)
+#   @mgreten/cli-agent           the external reviewer model type
+#   kw-review-lenses (this repo) the STRUCT/CRAFT/TONE prose lenses
+#
+# The two knowledge-work-specific moves the method calls for are wired here:
+#   1. Mechanical-before-judgement: the `lint` stage runs Vale and is GATED on it
+#      (workflow-succeeded), so the LLM reviewer never sees a draft that fails
+#      mechanical checks.
+#   2. Coverage contract: the `brief` evidence carries requiredUnits[]; the
+#      review->sign-off transition has a CEL gate asserting the draft's
+#      coveredUnits is a superset — a silent gap cannot advance. This is the
+#      prose analogue of the output-correctness gate the method names as the
+#      frontier.
+globalArguments:
+  stages:
+    - id: brief
+      initial: true
+      description: >-
+        Capture what the document must be: its type/mode, its audience, and the
+        coverage contract (the required units it must cover). Interactive — the
+        driver records the brief with the human.
+      work:
+        mode: interactive
+      evidence:
+        - name: brief
+          schema:
+            type: object
+            required: [docType, audience, requiredUnits]
+            properties:
+              docType:
+                type: string
+                enum: [tutorial, how-to, reference, explanation]
+              audience: { type: string, minLength: 1 }
+              # The coverage contract: the units the finished document MUST cover.
+              # Lens B checks the draft against these; the CEL gate enforces it.
+              requiredUnits:
+                type: array
+                minItems: 1
+                items: { type: string, minLength: 1 }
+      transitions:
+        - name: start-drafting
+          to: drafting
+          gates:
+            - { type: evidence-recorded, config: { name: brief } }
+
+    - id: drafting
+      description: >-
+        Produce (or revise) the document draft. Interactive — the primary agent
+        writes it. The draft records which required units it covers; lens B and
+        the coverage gate check that against the brief.
+      work:
+        mode: interactive
+        skills: [kw-review-lenses]
+        constraints: constraints/drafting-conventions.md
+      artifacts:
+        - name: document
+          schema:
+            type: object
+            required: [title, body, coveredUnits]
+            properties:
+              title: { type: string, minLength: 1 }
+              body: { type: string, minLength: 1 }
+              # The units this draft claims to cover. The review->sign-off CEL
+              # gate asserts this is a superset of the brief's requiredUnits.
+              coveredUnits:
+                type: array
+                items: { type: string, minLength: 1 }
+              # Explicitly-accepted gaps: a required unit deliberately not covered,
+              # with a reason. Named here so a gap is a recorded decision, not a
+              # silent omission (lens B treats an unmarked gap as a finding).
+              acceptedGaps:
+                type: array
+                items:
+                  type: object
+                  required: [unit, reason]
+                  properties:
+                    unit: { type: string, minLength: 1 }
+                    reason: { type: string, minLength: 1 }
+      transitions:
+        - name: submit
+          to: lint
+          gates:
+            - { type: artifact-exists, config: { artifact: document } }
+
+    - id: lint
+      description: >-
+        Deterministic prose lint (Vale). No LLM judgement. @atalanta/vale-review
+        is a MODEL with a `review` method that emits the same kind: findings
+        contract as an LLM reviewer (Vale error -> high, warning -> medium,
+        suggestion -> low), so it plugs straight into a findings-clear gate. The
+        driver writes the draft body to a file, runs `vale review --input
+        path=<file>`, and records the returned findings as the lint artifact.
+        Gated findings-clear on [critical, high] means Vale errors block; softer
+        alerts are recorded non-blockingly. Mechanical-before-judgement: this
+        stage sits before `review` so the LLM reviewer never sees a draft that
+        fails mechanical checks.
+      work:
+        mode: interactive
+        skills: []
+      artifacts:
+        - name: lint-review
+          kind: findings
+          reviews: document
+      transitions:
+        - name: clean
+          to: review
+          gates:
+            - type: artifact-fresh
+              config: { artifact: lint-review, recordedThisCycle: true }
+            - type: findings-clear
+              config: { artifact: lint-review, blocking: [critical, high] }
+        - name: dirty
+          to: drafting
+
+    - id: review
+      description: >-
+        Adversarial document review by an EXTERNAL, context-isolated reviewer
+        (canon). Three independent lenses run one pass each via
+        @atalanta/external-reviewer: STRUCT- (structure/mode), CRAFT- (claim
+        tracing + completeness), TONE- (voice). Findings merge into one artifact
+        with prefixed ids. See the kw-review-lenses skill for the invoke recipe.
+        Fallback: mode:dispatch with one subagent per lens (self-review — weaker).
+      work:
+        mode: dispatch
+        skills: [kw-review-lenses]
+        systemPrompt: |
+          Run three external-reviewer passes over the document under review —
+          one per lens (structure, craft, tone) — following the kw-review-lenses
+          skill. Each reviewer reads the draft and the brief from swamp itself and
+          returns findings JSON. Merge all three into one record_artifact with
+          stable STRUCT-/CRAFT-/TONE- ids. On re-entry, have each reviewer fetch
+          its prior findings and verify claimed resolutions rather than trust them.
+      artifacts:
+        - name: document-review
+          kind: findings
+          reviews: document
+      transitions:
+        - name: accept
+          to: sign-off
+          gates:
+            # fresh review this cycle (a prior-cycle pass cannot satisfy it)
+            - type: artifact-fresh
+              config: { artifact: document-review, recordedThisCycle: true }
+            # no unresolved critical/high finding across any lens
+            - type: findings-clear
+              config: { artifact: document-review, blocking: [critical, high] }
+            # coverage contract: every required unit is covered or an accepted gap.
+            # (A silent omission cannot advance — the prose output-correctness gate.)
+            - type: cel
+              config:
+                expr: >-
+                  evidence.brief.requiredUnits.all(u,
+                    artifacts.document.coveredUnits.exists(c, c == u) ||
+                    artifacts.document.acceptedGaps.exists(g, g.unit == u))
+                message: >-
+                  Every requiredUnit in the brief must appear in the document's
+                  coveredUnits or be listed in acceptedGaps with a reason. An
+                  uncovered, unacknowledged required unit is a silent gap and
+                  cannot advance.
+        - name: rework
+          to: drafting
+
+    - id: sign-off
+      description: >-
+        The one human judgement the interpreter cannot self-satisfy: is this
+        document ready to ship? The human approves the recorded artifact, fetched
+        fresh — not a summary from memory.
+      work:
+        mode: interactive
+      transitions:
+        - name: ship
+          to: done
+          manual: true
+          gates:
+            - { type: human-approval, config: { id: sign-off } }
+        - name: send-back
+          to: drafting
+
+    - id: done
+      terminal: true
+
+    - id: aborted
+      terminal: true
+
+  globalTransitions:
+    # Escalate short of abort: goes live once review has cycled 3+ times without
+    # clearing, so a stuck document reaches a human with its history rather than
+    # silently looping to the maxCycles cap.
+    - name: escalate
+      to: sign-off
+      gates:
+        - type: max-cycles
+          config: { stage: review, limit: 3 }
+        - type: human-approval
+          config: { id: escalate-review }
+    - name: abort
+      to: aborted
+      gates:
+        - type: human-approval
+          config: { id: abort-confirmation }
+
+# Scope the summary report so it only persists after `summary` (not after every
+# record_artifact/advance) — otherwise real history is buried under placeholders.
+reports:
+  require:
+    - { name: "@swamp/software-factory/work-item-summary", methods: [summary] }
+methods: {}

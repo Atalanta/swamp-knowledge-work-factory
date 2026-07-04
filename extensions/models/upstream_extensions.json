@@ -1,0 +1,72 @@
+{
+  "@swamp/software-factory": {
+    "version": "2026.06.24.1",
+    "pulledAt": "2026-07-04T07:10:37.177Z",
+    "files": [
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/artifact_schema.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/bindings.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/definition_schema.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/summary.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/gates.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/run_names.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/graph.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/mermaid.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/run_data.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/software_factory.ts",
+      ".swamp/bundles/a324fda6/software_factory.js",
+      ".swamp/pulled-extensions/@swamp/software-factory/reports/work_item_summary_report.ts",
+      ".swamp/report-bundles/637144ef/work_item_summary_report.js",
+      ".swamp/pulled-extensions/@swamp/software-factory/files/README.md",
+      ".swamp/pulled-extensions/@swamp/software-factory/files/LICENSE.txt",
+      ".claude/skills/software-factory",
+      ".swamp/pulled-extensions/@swamp/software-factory/manifest.yaml"
+    ],
+    "checksum": "29622d1cb0a3bffabf82f68b3d6cbe7e18efcac2c38458b7231e436eb91ab55f",
+    "filesChecksum": "b67885110295b63236743cdc42522703b2c5b18fae873892420b72e662c6c9d7",
+    "serverUrl": "https://swamp-club.com"
+  },
+  "@atalanta/external-reviewer": {
+    "version": "2026.06.28.1",
+    "pulledAt": "2026-07-04T07:10:48.781Z",
+    "files": [
+      ".swamp/pulled-extensions/@atalanta/external-reviewer/workflows/workflow-49aad5eb-89b1-454c-a2fd-ebb50f1c4b21.yaml",
+      ".swamp/pulled-extensions/@atalanta/external-reviewer/workflows/workflow-71858827-3139-4bc4-aef3-67e7a2c9419d.yaml",
+      ".swamp/pulled-extensions/@atalanta/external-reviewer/files/README.md",
+      ".swamp/pulled-extensions/@atalanta/external-reviewer/files/DESIGN.md",
+      ".swamp/pulled-extensions/@atalanta/external-reviewer/files/LICENSE.txt",
+      ".claude/skills/external-reviewer",
+      ".swamp/pulled-extensions/@atalanta/external-reviewer/manifest.yaml"
+    ],
+    "checksum": "395767685859638b3c8157a1be5f280a0f757a3f282950e014515f39fde0afa6",
+    "filesChecksum": "f8d7c5f23839bafd54d5f02ebd1517dbeb3e69d60f50f47ac21cf60d7a2e3ba2",
+    "serverUrl": "https://swamp-club.com"
+  },
+  "@mgreten/cli-agent": {
+    "version": "2026.06.27.2",
+    "pulledAt": "2026-07-04T07:10:49.802Z",
+    "files": [
+      ".swamp/pulled-extensions/@mgreten/cli-agent/models/cli_agent.ts",
+      ".swamp/bundles/da06fc84/cli_agent.js",
+      ".swamp/pulled-extensions/@mgreten/cli-agent/files/README.md",
+      ".swamp/pulled-extensions/@mgreten/cli-agent/files/LICENSE.txt",
+      ".swamp/pulled-extensions/@mgreten/cli-agent/manifest.yaml"
+    ],
+    "checksum": "9f61582900d2f5f8a9e6ae3ab91a6219936b4f9ee144e25b56ff419f635a8c21",
+    "filesChecksum": "9bc907651db21174608e298eb57ea952ac09ae0ec329111cb4e822f86fafcdbe",
+    "serverUrl": "https://swamp-club.com"
+  },
+  "@atalanta/vale-review": {
+    "version": "2026.07.01.1",
+    "pulledAt": "2026-07-04T07:10:52.344Z",
+    "files": [
+      ".swamp/pulled-extensions/@atalanta/vale-review/models/vale_review.ts",
+      ".swamp/bundles/37e3b191/vale_review.js",
+      ".swamp/pulled-extensions/@atalanta/vale-review/files/README.md",
+      ".swamp/pulled-extensions/@atalanta/vale-review/files/LICENSE.txt",
+      ".swamp/pulled-extensions/@atalanta/vale-review/manifest.yaml"
+    ],
+    "checksum": "8d777f2dfc7e39e913005d5c11403785f353c8bfe2a4231c68c85da153c3300c",
+    "filesChecksum": "3fcbcae7f0211f5454861fd10becd374ec2826678a10659b6265962ce4b5d699",
+    "serverUrl": "https://swamp-club.com"
+  }
+}

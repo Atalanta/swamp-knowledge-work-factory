@@ -1,0 +1,10 @@
+extends: existence
+message: "Hedging/filler: '%s' — cut it or state the point directly."
+level: warning
+ignorecase: true
+tokens:
+  - "it is worth noting that"
+  - "it should be noted that"
+  - "the important thing (?:here )?is"
+  - "arguably"
+  - "in some sense"
