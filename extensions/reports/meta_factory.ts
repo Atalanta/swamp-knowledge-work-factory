@@ -449,16 +449,106 @@ export function assertCoherentPolarity(design: DesignRecord): void {
 }
 
 /**
+ * Assert the graph can actually be driven — the failures the engine only raises
+ * at runtime on the SECOND recording, which `validate` (graph/schema
+ * well-formedness) does not catch. Two rules:
+ *
+ *   1. Dangling reference: every artifact a gate names (artifact-present,
+ *      review-clear, …) must be declared by some stage. A gate on an artifact no
+ *      stage produces can never be satisfied.
+ *   2. Rework must reach the producer. The engine lets a stage `record_artifact
+ *      X` only if X is declared on THAT stage (software_factory.ts), and an
+ *      artifact has exactly one declaring stage (assertUniqueDeclarations). So a
+ *      review that loops back to re-produce its subject must be able to return to
+ *      the subject's producing stage. For each review stage (dispatch + a
+ *      kind: findings artifact whose `reviews: S` names a subject), the stage
+ *      that declares S must be REACHABLE from the review stage via transitions —
+ *      otherwise the rework loop dead-ends at a stage that cannot re-record S.
+ *      (This is the classic mis-design: producer upstream of the reviser, rework
+ *      landing on a non-declaring stage.)
+ * Pure.
+ */
+export function assertDrivableGraph(design: DesignRecord): void {
+  // artifact/evidence name -> declaring stage id
+  const producer = new Map<string, string>();
+  for (const s of design.stages) {
+    for (const a of s.artifacts) producer.set(a.name, s.id);
+    for (const e of s.evidence) producer.set(e.name, s.id);
+  }
+
+  // 1. dangling gate references
+  for (const s of design.stages) {
+    for (const t of s.transitions) {
+      for (const g of t.gates) {
+        const ref = g.artifact ?? g.evidence;
+        if (ref !== undefined && !producer.has(ref)) {
+          throw new Error(
+            `stage "${s.id}" transition "${t.name}" gates on "${ref}", which no ` +
+              `stage declares — a gate on an undeclared artifact/evidence can ` +
+              `never be satisfied.`,
+          );
+        }
+      }
+    }
+  }
+
+  // adjacency + reachability (forward closure) per stage
+  const edges = new Map<string, string[]>();
+  for (const s of design.stages) {
+    edges.set(s.id, s.transitions.map((t) => t.to));
+  }
+  const globalTargets = design.globalTransitions.map((gt) => gt.to);
+  const reachableFrom = (start: string): Set<string> => {
+    const seen = new Set<string>();
+    const stack = [...(edges.get(start) ?? []), ...globalTargets];
+    while (stack.length > 0) {
+      const n = stack.pop()!;
+      if (seen.has(n)) continue;
+      seen.add(n);
+      for (const next of edges.get(n) ?? []) stack.push(next);
+    }
+    return seen;
+  };
+
+  // 2. every review's subject producer is reachable from the review stage
+  for (const s of design.stages) {
+    if (!isReviewStage(s)) continue;
+    const findings = s.artifacts.find((a) => a.kind === "findings");
+    const subject = findings?.reviews;
+    if (subject === undefined) continue; // no declared subject to rework
+    const producing = producer.get(subject);
+    if (producing === undefined) {
+      throw new Error(
+        `review stage "${s.id}" reviews "${subject}", which no stage declares.`,
+      );
+    }
+    if (producing === s.id) continue; // self-declared; fine
+    if (!reachableFrom(s.id).has(producing)) {
+      throw new Error(
+        `review stage "${s.id}" reviews "${subject}" (produced by stage ` +
+          `"${producing}"), but "${producing}" is not reachable from "${s.id}" — ` +
+          `a rework loop cannot return to re-record "${subject}". Route the ` +
+          `review's rework edge back to "${producing}" (the single stage that ` +
+          `declares the subject), per the canonical pattern (rework returns to ` +
+          `the producing stage).`,
+      );
+    }
+  }
+}
+
+/**
  * The pure transform: a validated design record -> the object that becomes the
  * target factory's `globalArguments` (plus the top-level `reports` block when
  * the summary report is scoped). Deterministic; no IO. Throws on a design that
- * double-declares an artifact/evidence name (see assertUniqueDeclarations).
+ * double-declares a name, has incoherent polarity, or cannot be driven (see the
+ * assert* helpers).
  */
 export function assembleDefinition(
   design: DesignRecord,
 ): Record<string, unknown> {
   assertUniqueDeclarations(design);
   assertCoherentPolarity(design);
+  assertDrivableGraph(design);
   const polarity: Polarity = {
     adversary: design.adversary,
     adversaryModel: design.adversaryModel,

@@ -140,6 +140,18 @@ a review stage `workMode: workflow` (that is for deterministic, no-LLM steps lik
 a linter or a test run). If the review is a deterministic linter, that is a
 separate `work` stage, not the `review` stage.
 
+**Rework returns to the producing stage.** The engine lets a stage re-record an
+artifact only if that stage DECLARES it, and each artifact has exactly one
+declaring/producing stage. So a review → rework loop must route the rework edge
+back to the stage that produces the reviewed artifact — not to a separate
+downstream reviser that doesn't declare it. The canonical shape (feature-factory):
+`implementing` produces `change-summary`; `code-review` reviews it and its
+`rework` edge returns to `implementing`, which re-records `change-summary` in
+place. Ask, for each artifact revised in a loop: **which single stage produces
+it, and does every rework edge that returns for revision land on that stage?** A
+loop that returns anywhere else dead-ends at runtime (and the assembler now
+rejects it).
+
 Record `stage-design` with a `stages[]` of `{id, kind, workMode, deterministic,
 description}`. Include the terminal `done` (and usually `aborted`).
 
@@ -237,10 +249,16 @@ of `{stageId, name, to, gateIntents[]}`.
      - `{ raw: { type: "<sf-gate-type>", config: { … } } }`
    - `globalTransitions[]`: `{ name, to, gates[] }`
 
-   **Two hard rules the assembler enforces (it throws otherwise):**
+   **Hard rules the assembler enforces (it throws otherwise):**
    - **Artifact/evidence names are global.** Declare each once, on its producing
      stage; a later stage re-records it in place — do NOT re-declare it in that
      stage's `artifacts[]`.
+   - **Rework returns to the producing stage.** A review's `rework` edge must
+     route back to the single stage that declares the reviewed artifact (which
+     re-records it in place) — the producer's declaring stage must be reachable
+     from the review stage. A loop that returns to a stage which doesn't declare
+     the subject dead-ends (the engine only lets a stage re-record what it
+     declares). Every gate must reference an artifact/evidence some stage declares.
    - **A review stage is `workMode: "dispatch"` with a `kind: "findings"`
      artifact.** That is the signal the assembler keys on. Do not author a review
      stage as `workMode: "workflow"` — it won't be recognised as review and the

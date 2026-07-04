@@ -10,6 +10,7 @@ import { assertEquals, assertThrows } from "jsr:@std/assert@1";
 import {
   assembleDefinition,
   assertCoherentPolarity,
+  assertDrivableGraph,
   assertUniqueDeclarations,
   countGates,
   type DesignRecord,
@@ -308,6 +309,63 @@ Deno.test("assertCoherentPolarity: coherent external design passes", () => {
     globalArguments: { stages: Array<Record<string, unknown>> };
   };
   assertEquals(def.globalArguments.stages.length, 3);
+});
+
+Deno.test("assertDrivableGraph: reviewDesign's rework-returns-to-producer topology passes", () => {
+  // review reviews `doc` (produced by draft) and loops rework -> draft. Fine.
+  assertDrivableGraph(reviewDesign("codex"));
+});
+
+Deno.test("assertDrivableGraph: rework not reaching the subject's producer throws", () => {
+  // The classic mis-design: `notes` is produced by `draft`, review reviews it,
+  // but the review's only non-accept edge routes to `address` — which does NOT
+  // declare `notes` and cannot reach `draft`. The rework loop dead-ends.
+  const bad = DesignRecordSchema.parse({
+    factoryName: "misdesign",
+    stages: [
+      {
+        id: "intake",
+        initial: true,
+        workMode: "interactive",
+        artifacts: [{ name: "notes", kind: "regular", fields: [{ name: "body", type: "string", required: true }] }],
+        transitions: [{ name: "submit", to: "review", gates: [{ intent: "artifact-present", artifact: "notes" }] }],
+      },
+      {
+        id: "review",
+        workMode: "dispatch",
+        artifacts: [{ name: "notes-review", kind: "findings", reviews: "notes" }],
+        transitions: [
+          { name: "accept", to: "done", gates: [{ intent: "review-clear", artifact: "notes-review" }] },
+          { name: "rework", to: "address" }, // address can't re-record notes, can't reach intake
+        ],
+      },
+      {
+        id: "address",
+        workMode: "interactive",
+        // deliberately does NOT declare notes, and only loops back to review
+        transitions: [{ name: "back", to: "review" }],
+      },
+      { id: "done", terminal: true },
+    ],
+  });
+  assertThrows(() => assembleDefinition(bad), Error, "is not reachable from");
+});
+
+Deno.test("assertDrivableGraph: a gate on an undeclared artifact throws", () => {
+  const bad = DesignRecordSchema.parse({
+    factoryName: "dangling",
+    stages: [
+      {
+        id: "a",
+        initial: true,
+        workMode: "interactive",
+        // gate references `ghost`, which no stage declares
+        transitions: [{ name: "go", to: "done", gates: [{ intent: "artifact-present", artifact: "ghost" }] }],
+      },
+      { id: "done", terminal: true },
+    ],
+  });
+  assertThrows(() => assembleDefinition(bad), Error, 'gates on "ghost"');
 });
 
 Deno.test("assertUniqueDeclarations: passes a well-formed design", () => {
