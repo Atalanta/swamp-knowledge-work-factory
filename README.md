@@ -139,3 +139,21 @@ extensions/skills/kw-review-lenses/
 constraints/
   drafting-conventions.md   author-side counterpart to the review lenses
 ```
+
+## Known limitations
+
+- **Polarity is captured but not yet auto-wired.** The interview records
+  `reviewer` / `author` / `adversary`, and the assembler renders a review stage
+  in the `workMode` the design gives it. It does **not** yet translate
+  `reviewer: external` into an `@atalanta/external-reviewer`-wired stage — so a
+  dispatch-mode review stage runs same-context Claude subagents, and the "codex
+  adversary" is nominal until you switch that stage to the external reviewer
+  yourself (a bounded change: point the review stage at the external-reviewer
+  bridge and scaffold the reviewer instance, per the `factory-builder` skill's
+  "scaffold the reviewer instance" section). Making the assembler emit the
+  external-reviewer wiring from the recorded polarity is the next feature.
+- **Artifact/evidence names are global to a run.** Declare each once on its
+  producing stage; re-record it in place on later stages, don't re-declare it.
+  The assembler now fails loudly (`assembleDefinition` throws, the report returns
+  `{error}`) if a design double-declares a name, rather than emitting a
+  definition the engine rejects at `validate`.

@@ -9,6 +9,7 @@
 import { assertEquals, assertThrows } from "jsr:@std/assert@1";
 import {
   assembleDefinition,
+  assertUniqueDeclarations,
   countGates,
   type DesignRecord,
   DesignRecordSchema,
@@ -205,4 +206,40 @@ Deno.test("countGates: counts expanded gates across stages + globals", () => {
   // 1 each: start-drafting(1) + submit(1) + ship(1) + rework/send-back(0) +
   // global abort(1) = 3 + 1 + 1 + 1 + 1 = 7
   assertEquals(countGates(REVIEWED_DOCUMENT), 7);
+});
+
+Deno.test("assertUniqueDeclarations: passes a well-formed design", () => {
+  // REVIEWED_DOCUMENT declares each artifact/evidence once — no throw.
+  assertUniqueDeclarations(REVIEWED_DOCUMENT);
+});
+
+Deno.test("assembleDefinition: throws when an artifact is declared on two stages", () => {
+  // The target engine requires artifact names global to a run. A design that
+  // declares `draft` on both an intake and a revise stage must fail loudly here,
+  // not assemble to a definition the engine rejects at validate.
+  const doubled = DesignRecordSchema.parse({
+    factoryName: "doubled",
+    stages: [
+      {
+        id: "intake",
+        initial: true,
+        workMode: "interactive",
+        artifacts: [{ name: "draft", kind: "regular", fields: [{ name: "body", type: "string", required: true }] }],
+        transitions: [{ name: "next", to: "revise", gates: [{ intent: "artifact-present", artifact: "draft" }] }],
+      },
+      {
+        id: "revise",
+        workMode: "interactive",
+        // WRONG: re-declares `draft` instead of re-recording it in place
+        artifacts: [{ name: "draft", kind: "regular", fields: [{ name: "body", type: "string", required: true }] }],
+        transitions: [{ name: "done", to: "done", gates: [{ intent: "artifact-present", artifact: "draft" }] }],
+      },
+      { id: "done", terminal: true },
+    ],
+  });
+  assertThrows(
+    () => assembleDefinition(doubled),
+    Error,
+    'artifact "draft" is declared on both stage "intake" and stage "revise"',
+  );
 });

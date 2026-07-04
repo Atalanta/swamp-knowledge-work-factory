@@ -320,13 +320,43 @@ function renderStage(
 }
 
 /**
+ * Assert every artifact and evidence name is declared at most once across the
+ * whole design. The target engine requires artifact/evidence names to be global
+ * to a run — an artifact is declared once (on its producing stage) and
+ * re-recorded in place elsewhere, never re-declared. A design that declares the
+ * same name on two stages assembles to a definition the engine rejects at
+ * validate; catching it here turns that silent bad-output into a loud assembly
+ * error (report.execute wraps this and returns the {error} json). Pure.
+ */
+export function assertUniqueDeclarations(design: DesignRecord): void {
+  const seen = new Map<string, string>(); // name -> first stage that declared it
+  const check = (name: string, stageId: string, kind: string) => {
+    const prior = seen.get(name);
+    if (prior !== undefined) {
+      throw new Error(
+        `${kind} "${name}" is declared on both stage "${prior}" and stage ` +
+          `"${stageId}" — artifact/evidence names are global to a run; declare ` +
+          `it once and re-record it in place on the other stage.`,
+      );
+    }
+    seen.set(name, stageId);
+  };
+  for (const s of design.stages) {
+    for (const a of s.artifacts) check(a.name, s.id, "artifact");
+    for (const e of s.evidence) check(e.name, s.id, "evidence");
+  }
+}
+
+/**
  * The pure transform: a validated design record -> the object that becomes the
  * target factory's `globalArguments` (plus the top-level `reports` block when
- * the summary report is scoped). Deterministic; no IO.
+ * the summary report is scoped). Deterministic; no IO. Throws on a design that
+ * double-declares an artifact/evidence name (see assertUniqueDeclarations).
  */
 export function assembleDefinition(
   design: DesignRecord,
 ): Record<string, unknown> {
+  assertUniqueDeclarations(design);
   const globalArguments: Record<string, unknown> = {
     stages: design.stages.map(renderStage),
   };
