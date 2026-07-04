@@ -1,6 +1,6 @@
 manifestVersion: 1
 name: '@atalanta/kw-review-lenses'
-version: 2026.07.04.1
+version: 2026.07.04.2
 description: |
   Three adversarial knowledge-work (prose/document) review prompts ("lenses")
   for an independent reviewer in a @swamp/software-factory run. The prose analogue

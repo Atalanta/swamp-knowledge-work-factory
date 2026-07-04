@@ -96,19 +96,32 @@ swamp workflow run @atalanta/external-reviewer/external-review-findings \
 ```
 
 **Step 2 — read the findings back.** `invokeAndParse` persists the parsed JSON on
-the reviewer model's `invocation` resource, not as a step output:
+the reviewer model's `invocation` resource. Project just the findings array (no
+`--json`, no pipe — the CEL projection prints the value directly):
 
 ```bash
-swamp data query 'modelName == "external-reviewer" && specName == "invocation" \
-  && attributes.tags.workItem == "DOC-42" \
-  && attributes.tags.artifact == "document-review"' \
-  --select '{"findings": attributes.parsedResponse, "ok": attributes.success}' --json
+swamp data query 'modelName == "external-reviewer" && specName == "invocation" && attributes.tags.workItem == "DOC-42" && attributes.tags.artifact == "document-review"' --select attributes.parsedResponse.findings
 ```
 
-**Step 3 — record on the factory.** Pass the returned findings to the factory's
-`resolve_findings` (or `record_artifact` for the first recording). The
-`STRUCT-`/`CRAFT-`/`TONE-` prefixes keep the three passes' ids from colliding when
-the `findings-clear` gate evaluates them.
+The result is a small array of `{id, severity, category?, description, resolved}`
+— the contract caps each `description` and forbids extra fields, so it is KB-scale,
+not tens of KB. If it comes back large or with `heading`/`passage`/`note` keys,
+the reviewer ignored the contract: re-run the lens, do not try to record the
+bloated output.
+
+**Step 3 — record on the factory.** Pass that findings array straight to
+`record_artifact` as the literal payload (first recording) or `resolve_findings`
+(subsequent). It is small enough to be a normal `--input` argument — do NOT pipe
+or redirect the query into a file:
+
+```bash
+swamp model method run <factory> record_artifact --input workItem=DOC-42 --input name=document-review --input payload='{"findings":[ <the array from Step 2> ]}'
+```
+
+Merge the three lenses' arrays into one `findings` array before recording (or
+record one lens then `resolve_findings`-merge the others). The
+`STRUCT-`/`CRAFT-`/`TONE-` prefixes keep the passes' ids from colliding when the
+`findings-clear` gate evaluates them.
 
 **Step 4 — repeat** for the remaining lenses, then advance the factory once
 `findings-clear` is satisfied.

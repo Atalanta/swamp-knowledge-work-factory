@@ -82,6 +82,16 @@ anything else.** The output must be a single JSON object matching the factory's
 }
 ```
 
+- **Emit EXACTLY these fields per finding and NO others:** `id`, `severity`,
+  `category` (optional), `description`, `resolved`. Do **not** add `heading`,
+  `passage`, `quote`, `note`, `evidence`, `excerpt`, or any other key — the
+  factory's `kind: findings` schema is strict and rejects undeclared keys, and
+  extra prose fields bloat the payload past what can be recorded. Put the
+  offending location and the quoted text INSIDE `description`.
+- **Keep each `description` under ~600 characters** — one concrete finding, not
+  an essay. The whole findings array must be small enough to record as a single
+  artifact payload; a reviewer that returns tens of KB of prose has failed the
+  contract.
 - `severity` is **exactly one of** `critical | high | medium | low`. There is no
   `info` — record informational observations as `low`.
 - `id` uses this lens's stable prefix and a counter (`STRUCT-`, `CRAFT-`, or
