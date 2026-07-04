@@ -222,7 +222,3 @@ reports:
     # The assembler report fires on record_artifact (self-guards to the `design`
     # artifact) and emits the target factory definition as json.
     - { name: "@atalanta/meta-factory", methods: [record_artifact] }
-
-reports:
-  require:
-    - { name: "@swamp/software-factory/work-item-summary", methods: [summary] }
