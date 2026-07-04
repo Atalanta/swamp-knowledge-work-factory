@@ -13,7 +13,7 @@ import {
   type DesignRecord,
   DesignRecordSchema,
   expandGates,
-} from "./factory_assembler.ts";
+} from "./meta_factory.ts";
 
 Deno.test("expandGates: review-clear expands to fresh + findings-clear", () => {
   const gates = expandGates({ intent: "review-clear", artifact: "document-review" });

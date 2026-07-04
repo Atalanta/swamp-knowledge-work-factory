@@ -454,7 +454,7 @@ function renderMarkdown(
 }
 
 export const report = {
-  name: "@atalanta/factory-assembler",
+  name: "@atalanta/meta-factory",
   description:
     "Deterministically assemble a @swamp/software-factory definition from the " +
     "factory-design interview's consolidated `design` artifact. Fires when that " +

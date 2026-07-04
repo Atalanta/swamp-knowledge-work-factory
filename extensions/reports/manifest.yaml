@@ -1,5 +1,5 @@
 manifestVersion: 1
-name: '@atalanta/factory-assembler'
+name: '@atalanta/meta-factory'
 version: 2026.07.04.1
 description: |
   Deterministically assemble a @swamp/software-factory definition from the design
@@ -29,7 +29,7 @@ description: |
   ## Use
 
   ```
-  swamp extension pull @atalanta/factory-assembler
+  swamp extension pull @atalanta/meta-factory
   # invoke the bundled `factory-builder` skill; say "build me a kw factory"
   ```
 repository: 'https://github.com/Atalanta/swamp-knowledge-work-factory'
@@ -39,7 +39,7 @@ vaults: []
 drivers: []
 datastores: []
 reports:
-  - factory_assembler.ts
+  - meta_factory.ts
 skills:
   - factory-builder
 additionalFiles:
@@ -52,7 +52,7 @@ labels:
   - factory-builder
   - knowledge-work
 dependencies:
-  # Resolved automatically on `swamp extension pull @atalanta/factory-assembler`
+  # Resolved automatically on `swamp extension pull @atalanta/meta-factory`
   # (depth-10 resolution), so a consuming repo runs ONE pull and the agent never
   # issues pull commands. @swamp/software-factory is the engine; the rest are what
   # a knowledge-work factory (and the interview's own review stage) wire:

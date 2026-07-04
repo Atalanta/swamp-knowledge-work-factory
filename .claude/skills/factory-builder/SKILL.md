@@ -38,7 +38,7 @@ swamp model search
 
 ### Setup (only when `factory-design` is absent)
 
-All extensions are already present: pulling `@atalanta/factory-assembler` (which
+All extensions are already present: pulling `@atalanta/meta-factory` (which
 loaded this skill) auto-resolves its manifest dependencies —
 `@swamp/software-factory`, `@atalanta/external-reviewer` (and `@mgreten/cli-agent`
 under it), `@atalanta/kw-review-lenses`, `@atalanta/vale-review`. **Do not run any
@@ -60,7 +60,7 @@ Then:
    `models/@swamp/software-factory/<uuid>.yaml` (the one named `factory-design`),
    replacing `globalArguments: {}`, keeping the minted header and trailing
    `methods: {}`. The template ships at
-   `.swamp/pulled-extensions/@atalanta/factory-assembler/templates/factory-design.definition.yaml`.
+   `.swamp/pulled-extensions/@atalanta/meta-factory/templates/factory-design.definition.yaml`.
    One mechanical copy — not authoring.
 2. `swamp model method run factory-design validate` — must report valid. If not,
    the copy in step 1 is wrong; fix it against the template, do not improvise.
@@ -198,7 +198,7 @@ of `{stageId, name, to, gateIntents[]}`.
    free-form fields the interview captured (stage `systemPrompt`s, lens skill
    names) directly into the record — they are evidence, not improvised now.
 2. `record_dispatch`, then `record_artifact name=design payload='<the DesignRecord>'`.
-   Recording `design` **fires the `@atalanta/factory-assembler` report** — it
+   Recording `design` **fires the `@atalanta/meta-factory` report** — it
    validates the record and emits the target factory definition as json. No
    method to run, no assembler instance.
 3. Read the report's json (the assembled definition):

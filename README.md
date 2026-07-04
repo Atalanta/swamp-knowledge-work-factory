@@ -12,7 +12,7 @@ a **structured interview** that designs a factory for your knowledge work and
 assembles a validated definition:
 
 ```
-swamp extension pull @atalanta/factory-assembler   # auto-resolves the whole tree (see Dependencies)
+swamp extension pull @atalanta/meta-factory   # auto-resolves the whole tree (see Dependencies)
 # then, to the agent:  "build me a kw factory"
 ```
 
@@ -24,7 +24,7 @@ do no typing or pasting; you answer the interview.
 
 ## What this repo ships
 
-1. **`@atalanta/factory-assembler`** — the factory-builder skill (the interview
+1. **`@atalanta/meta-factory`** — the factory-builder skill (the interview
    driver), the deterministic assembler model that renders a design record into
    factory YAML, and the bundled `factory-design` interview template.
 2. **`@atalanta/kw-review-lenses`** — the prose analogue of
@@ -61,19 +61,19 @@ you'd lose upstream fixes. This repo depends.
 
 ## Dependencies (one pull, auto-resolved)
 
-`@atalanta/factory-assembler` declares the whole tree in its manifest, so a
+`@atalanta/meta-factory` declares the whole tree in its manifest, so a
 single pull resolves everything (swamp resolves dependencies to depth 10 — you
 never issue the sub-pulls, and neither does the agent):
 
 ```
-swamp extension pull @atalanta/factory-assembler
+swamp extension pull @atalanta/meta-factory
 ```
 
 brings, automatically:
 
 | Extension | Role |
 | --- | --- |
-| `@atalanta/factory-assembler` | the `factory-builder` skill, the assembler report, the interview template |
+| `@atalanta/meta-factory` | the `factory-builder` skill, the assembler report, the interview template |
 | `@swamp/software-factory` | the engine (the model type every factory instantiates) |
 | `@atalanta/external-reviewer` | the external adversarial reviewer bridge (Claude drives, an external agent judges) |
 | `@mgreten/cli-agent` | the external reviewer model type (under external-reviewer) |
