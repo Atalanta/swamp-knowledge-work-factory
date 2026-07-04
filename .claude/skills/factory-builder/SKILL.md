@@ -31,6 +31,74 @@ per-phase guidance: what to ask, and what shape to record.
 before driving — they are the source of the seed questions and the standard you
 hold each answer to.**
 
+## Setup — do this yourself, ask the human for nothing
+
+The human should never create models or paste YAML. When you are triggered and
+the required models do not yet exist, stand them up from the bundled templates.
+Check first, then create only what is missing.
+
+**1. Are the models already here?** List them:
+
+```
+swamp model search
+```
+
+If `factory-design` (@swamp/software-factory) and `assembler`
+(@atalanta/factory-assembler) both exist, skip to Start. Otherwise:
+
+**2. Pull the dependencies** (idempotent — skip any already pulled):
+
+```
+swamp extension pull @swamp/software-factory
+swamp extension pull @atalanta/factory-assembler
+swamp extension pull @atalanta/external-reviewer
+swamp extension pull @mgreten/cli-agent
+```
+
+(Pre-publish: the human has already run `swamp extension source add <repo>` so
+these resolve from the local source. If a pull fails as unresolvable, tell the
+human to add the source; do not paste files as a workaround.)
+
+**3. Create the `assembler` instance and set its global arg:**
+
+```
+swamp model create @atalanta/factory-assembler assembler
+```
+
+Then edit the created file (find it under
+`models/@atalanta/factory-assembler/<uuid>.yaml`) so its `globalArguments` is:
+
+```yaml
+globalArguments:
+  interviewFactory: factory-design
+```
+
+**4. Create the `factory-design` interview instance and write its definition.**
+The definition body ships in the assembler extension at
+`templates/factory-design.definition.yaml`. Create the instance, then write that
+template's `globalArguments` + `reports` blocks into the created file (replacing
+its `globalArguments: {}`, keeping the `type/typeVersion/id/name/version/tags`
+header the `create` minted and the trailing `methods: {}`):
+
+```
+swamp model create @swamp/software-factory factory-design
+```
+
+Read the bundled template (in this repo after pull, at
+`.swamp/pulled-extensions/@atalanta/factory-assembler/templates/factory-design.definition.yaml`,
+or `extensions/models/templates/factory-design.definition.yaml` in the source
+repo) and write it into the instance file with your file-editing tools. Do this
+mechanically — it is a fixed transcription, not a judgement.
+
+**5. Validate before driving:**
+
+```
+swamp model method run factory-design validate
+```
+
+Must report valid. If it does not, the transcription in step 4 is wrong — fix it
+against the template; do not improvise the definition.
+
 ## The loop (per phase)
 
 For each interview stage: `status` → `record_dispatch` → ask that phase's seed
@@ -95,6 +163,13 @@ Record `artifact-design` with an `artifacts[]` of `{stageId, name, kind
 
 ### Phase 4 — adversary (artifact: `lens-design`)
 
+- **Who authors, who is the adversary?** Normal polarity: author = `claude`,
+  adversary = `codex` — Claude (the driver) writes, an independent codex reviews.
+  Ask the human and record both. The choices are providers
+  (`claude`/`codex`/`gemini`/`opencode`/`amp`); optionally an `adversaryModel`
+  (e.g. `gpt-5.5`). The factory definition is polarity-neutral — it names a
+  reviewer *instance*, not a provider — so this choice drives how you scaffold
+  that instance (below), not the YAML. Reversing later is a one-field edit.
 - What must review catch? Against which standards → which lenses? (For prose:
   the `kw-review-lenses` STRUCT/CRAFT/TONE set; for code: `ts-review-lenses`
   A/B/C. For a house standard, name it.)
@@ -106,8 +181,10 @@ Record `artifact-design` with an `artifacts[]` of `{stageId, name, kind
   before the LLM review.
 - How many rework cycles before escalation to a human short of abort?
 
-Record `lens-design`: `{reviewer, lenses[], standards[], mechanicalLinterFirst,
-maxReviewCycles}`.
+Record `lens-design`: `{reviewer, author, adversary, adversaryModel?, lenses[],
+standards[], mechanicalLinterFirst, maxReviewCycles}`. Carry `author`,
+`adversary`, `adversaryModel` into the consolidated `design` record too — they
+are evidence of the intended polarity.
 
 ### Phase 5 — gates (artifact: `gate-design`)
 
@@ -169,6 +246,29 @@ swamp model create @swamp/software-factory <factoryName>
 swamp model method run <factoryName> validate
 swamp model method run <factoryName> describe   # show the human the Mermaid
 ```
+
+### Scaffold the reviewer instance at the chosen polarity
+
+If the design used an external reviewer, create the `@mgreten/cli-agent` instance
+the factory's review stage references, with `defaultProvider` set to the
+`adversary` recorded in the design (normal polarity: `codex`):
+
+```
+swamp model create @mgreten/cli-agent external-reviewer
+swamp model edit external-reviewer      # set globalArguments:
+#   defaultProvider: <adversary>        # e.g. codex (normal) — the ADVERSARY, not the author
+#   defaultModel: <adversaryModel>      # e.g. gpt-5.5
+#   codexPath: <adversary-cli>          # the adversary provider's CLI on PATH
+#   wallTimeoutMs: 900000
+#   maxRetries: 1
+```
+
+The author is whoever drives the factory (normally Claude via the
+`software-factory` skill). **Reversing polarity later is a one-field edit** —
+`swamp model edit external-reviewer` and change `defaultProvider`/`defaultModel`;
+the factory definition does not change, because it names the instance, not the
+provider. Confirm the adversary's CLI is installed and authenticated on the
+machine before the first review call.
 
 Then drive the new factory with the `software-factory` skill. The interview never
 runs the target factory.

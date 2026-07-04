@@ -41,6 +41,7 @@ skills:
 additionalFiles:
   - README.md
   - LICENSE.txt
+  - templates/factory-design.definition.yaml
 labels:
   - software-factory
   - meta

@@ -135,6 +135,15 @@ export const DesignRecordSchema = z.object({
   globalTransitions: z.array(GlobalTransitionSpecSchema).default([]),
   // Whether to scope the work-item-summary report (recommended default true).
   scopeSummaryReport: z.boolean().default(true),
+  // Polarity — who authors vs who adversarially reviews. The factory YAML is
+  // polarity-neutral (it names a reviewer INSTANCE, not a provider), so these
+  // do not affect the rendered definition. They are carried through as evidence
+  // of the intended polarity and drive how the builder scaffolds the
+  // external-reviewer instance (defaultProvider = adversary). Reversing later is
+  // a one-field edit on that instance, not a re-assembly.
+  author: z.enum(["claude", "codex", "gemini", "opencode", "amp"]).optional(),
+  adversary: z.enum(["claude", "codex", "gemini", "opencode", "amp"]).optional(),
+  adversaryModel: z.string().optional(),
 });
 
 export type DesignRecord = z.infer<typeof DesignRecordSchema>;

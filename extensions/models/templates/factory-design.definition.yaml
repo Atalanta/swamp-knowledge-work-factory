@@ -1,44 +1,21 @@
-type: '@swamp/software-factory'
-typeVersion: 2026.06.24.1
-id: 2daab953-a6d8-4738-833d-552bab5b3262
-name: factory-design
-version: 1
-tags: {}
-# The factory-design interview: a @swamp/software-factory whose output is the
-# design of ANOTHER @swamp/software-factory. You use a factory to design a
-# factory.
+# Template body for the `factory-design` interview factory.
 #
-#   domain -> stages -> artifacts -> adversary -> gates -> assembly -> confirm -> done
+# The factory-builder skill's setup runbook writes this into a freshly created
+# @swamp/software-factory instance named `factory-design` (after `swamp model
+# create` mints the UUID header). It is the design-interview state machine that
+# the skill drives. Do not edit by hand in a consuming repo — re-pull the
+# extension to refresh it.
 #
-# Each judgement phase is a CONSTRAINED conversation: the factory-builder skill
-# loads that phase's guidance, seed questions, and worked examples (from
-# docs/factory-canon.md + factory-method.md) and records the human's decisions
-# as a strict, schema-validated design artifact. The phase cannot advance until
-# its artifact exists in the required shape — that is what stops the interview
-# being an unstructured ramble. Every decision is persisted as swamp data, not
-# left in agent context.
-#
-# The `assembly` phase is a model METHOD (@atalanta/factory-assembler): it reads
-# the consolidated `design` artifact and renders the target factory YAML
-# deterministically. No LLM in assembly — the judgement was captured in the
-# phases and is now evidence; assembly is a pure function of it.
-#
-# The per-phase artifacts (domain-design, stage-design, ...) capture the
-# human-facing decisions phase by phase. The final `design` artifact is the
-# machine-facing consolidated DesignRecord the assembler consumes; its nested
-# shape is validated for real by the assembler's zod DesignRecordSchema (the SF
-# schema subset cannot express the full recursive record, so the artifact
-# schema here checks only that the consolidated object is present and non-empty).
-#
-# Drive this with the `factory-builder` skill.
+# Append the lines below to the created instance file, replacing its
+# `globalArguments: {}` line and its trailing `methods: {}` (keep `methods: {}`
+# at the end).
 globalArguments:
   stages:
     - id: domain
       initial: true
       description: >-
         Phase 1 — Domain. What knowledge work is this factory for? What is the
-        finished artifact, and what document type/mode is it? The builder skill
-        asks the seed questions and records the decisions.
+        finished artifact, and what document type/mode is it?
       work:
         mode: interactive
         skills: [factory-builder]
@@ -62,10 +39,9 @@ globalArguments:
 
     - id: stages
       description: >-
-        Phase 2 — Stages. What is the happy-path stage flow? For each stage: its
-        work mode, and whether it is deterministic (workflow/method) or
-        judgement (interactive/dispatch). The method calls for making
-        deterministic everything that can be.
+        Phase 2 — Stages. The happy-path stage flow; per stage its work mode and
+        whether it is deterministic (workflow/method) or judgement
+        (interactive/dispatch).
       work:
         mode: interactive
         skills: [factory-builder]
@@ -83,9 +59,7 @@ globalArguments:
                   required: [id, kind]
                   properties:
                     id: { type: string, minLength: 1 }
-                    kind:
-                      type: string
-                      enum: [initial, work, review, terminal]
+                    kind: { type: string, enum: [initial, work, review, terminal] }
                     workMode:
                       type: string
                       enum: [interactive, dispatch, workflow, method]
@@ -99,10 +73,8 @@ globalArguments:
 
     - id: artifacts
       description: >-
-        Phase 3 — Artifacts & schemas. For each stage, what durable product does
-        it record, and what invariants must be locked in the schema (coverage
-        contract, required sources, claim provenance)? Lock invariants at the
-        data layer rather than hoping a reviewer catches their absence.
+        Phase 3 — Artifacts & schemas. Per stage, the durable product and the
+        invariants to lock in its schema (coverage contract, sources, claims).
       work:
         mode: interactive
         skills: [factory-builder]
@@ -120,9 +92,7 @@ globalArguments:
                   properties:
                     stageId: { type: string, minLength: 1 }
                     name: { type: string, minLength: 1 }
-                    kind:
-                      type: string
-                      enum: [regular, findings]
+                    kind: { type: string, enum: [regular, findings] }
                     invariants: { type: array, items: { type: string } }
       transitions:
         - name: next
@@ -132,10 +102,9 @@ globalArguments:
 
     - id: adversary
       description: >-
-        Phase 4 — The adversary. What must review catch, against which standards
-        (which lenses)? External context-isolated reviewer (canon) or dispatch
-        fallback? How many rework cycles before escalation? A mechanical linter
-        first?
+        Phase 4 — The adversary. Who authors vs who reviews (polarity); what
+        review must catch; which lenses/standards; external or dispatch; a
+        mechanical linter first; how many cycles before escalation.
       work:
         mode: interactive
         skills: [factory-builder]
@@ -145,13 +114,7 @@ globalArguments:
             type: object
             required: [reviewer, lenses, author, adversary]
             properties:
-              reviewer:
-                type: string
-                enum: [external, dispatch]
-              # Polarity: who authors the work vs who adversarially reviews it.
-              # Normal polarity is author=claude, adversary=codex. The builder
-              # scaffolds the external-reviewer instance with defaultProvider =
-              # <adversary>; reversing later is editing that one field.
+              reviewer: { type: string, enum: [external, dispatch] }
               author:
                 type: string
                 enum: [claude, codex, gemini, opencode, amp]
@@ -171,10 +134,9 @@ globalArguments:
 
     - id: gates
       description: >-
-        Phase 5 — Gates. For each transition, what must be PROVABLY TRUE to leave
-        the stage? Where is the one human sign-off the interpreter cannot
-        self-satisfy? The builder captures each gate as an intent (expanded by
-        the assembler) or a raw gate type + config.
+        Phase 5 — Gates. Per transition, what must be provably true to leave the
+        stage; where the one human sign-off is. Captured as gate intents (the
+        assembler expands) or raw gate type + config.
       work:
         mode: interactive
         skills: [factory-builder]
@@ -203,11 +165,9 @@ globalArguments:
 
     - id: assembly
       description: >-
-        Phase 6 — Assembly (deterministic). The builder consolidates the five
-        phase artifacts into one `design` artifact (the DesignRecord the
-        assembler reads), then this stage runs @atalanta/factory-assembler.build
-        to render the target factory YAML as a file output. No LLM: a pure
-        projection of the recorded design.
+        Phase 6 — Assembly (deterministic). The builder consolidates the phase
+        artifacts into one `design` artifact (the DesignRecord), then this stage
+        runs @atalanta/factory-assembler.build to render the target factory YAML.
       work:
         mode: method
         method:
@@ -217,9 +177,6 @@ globalArguments:
             session: '${{ self.workItem }}'
         resultEvidence: assembly-run
       artifacts:
-        # The consolidated machine-facing DesignRecord. The builder records this
-        # from the five phase artifacts BEFORE running the assembler method.
-        # Nested shape is validated for real by the assembler's zod schema.
         - name: design
           schema:
             type: object
@@ -239,10 +196,7 @@ globalArguments:
     - id: confirm
       description: >-
         Phase 7 — Human confirm. Present the rendered target factory YAML and its
-        Mermaid to the human. On approval the interview is done; the target
-        factory YAML (a file artifact on the assembler) is installed as a live
-        definition as a separate explicit step. The interview never runs the
-        target factory.
+        Mermaid; on approval the interview is done.
       work:
         mode: interactive
         skills: [factory-builder]
@@ -271,4 +225,3 @@ globalArguments:
 reports:
   require:
     - { name: "@swamp/software-factory/work-item-summary", methods: [summary] }
-methods: {}
