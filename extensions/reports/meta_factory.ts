@@ -39,6 +39,13 @@ import { z } from "npm:zod@4";
 // the interview factory's artifact schemas MUST produce these shapes.
 // ---------------------------------------------------------------------------
 
+/**
+ * Default maxCycles for a review stage when the design gives none. Higher than
+ * the engine's default of 5 because iterative prose/knowledge review converges
+ * slowly; a design can still set an explicit maxCycles to override.
+ */
+const REVIEW_LOOP_MAX_CYCLES = 10;
+
 /** The work mode of a target stage (SF grammar). */
 const WorkModeEnum = z.enum(["interactive", "dispatch", "workflow", "method"]);
 
@@ -140,13 +147,11 @@ export const DesignRecordSchema = z.object({
   globalTransitions: z.array(GlobalTransitionSpecSchema).default([]),
   // Whether to scope the work-item-summary report (recommended default true).
   scopeSummaryReport: z.boolean().default(true),
-  // Polarity — who authors vs who adversarially reviews. An EXTERNAL adversary
-  // (not claude) makes the assembler append the external-reviewer transport
-  // instruction to each review stage (see renderStage), so a review runs an
-  // independent context-isolated reviewer rather than same-context subagents;
-  // adversary=claude/unset leaves review same-context. The reviewer MODEL
-  // instance (defaultProvider = adversary) is scaffolded by the factory-builder
-  // skill on install; reversing polarity later is a one-field edit on it.
+  // Polarity — reviewer + adversary pick the review transport (reviewTransport):
+  //   reviewer: external + non-claude adversary -> external (different model + process)
+  //   reviewer: external + claude/no adversary  -> dispatch-isolated (fresh-context subagent, same model — independent by CONTEXT)
+  //   reviewer: dispatch / unset                -> same-context (driver reviews inline)
+  // Context-isolation, not model-identity, is what makes review independent.
   reviewer: z.enum(["external", "dispatch"]).optional(),
   author: z.enum(["claude", "codex", "gemini", "opencode", "amp"]).optional(),
   adversary: z.enum(["claude", "codex", "gemini", "opencode", "amp"])
@@ -283,10 +288,41 @@ function renderArtifact(
   return entry;
 }
 
-/** The polarity a review stage is wired at (from the design's adversary field). */
+/**
+ * How a review stage is wired for independence. What makes a review valid is
+ * CONTEXT-ISOLATION, not model-identity — a fresh-context reviewer is
+ * independent even when it is the same model as the driver.
+ *   - "external"         — a different model in a separate process (the
+ *                          @atalanta/external-reviewer cli-agent bridge). Model
+ *                          + process isolation; the strongest tier.
+ *   - "dispatch-isolated"— a fresh-context subagent, same model as the driver.
+ *                          Independent by context (a new Claude subagent reviews
+ *                          Claude's work without sharing its context).
+ *   - "same-context"     — the driver reviews inline; no isolation. Weakest.
+ */
+type ReviewTransport = "external" | "dispatch-isolated" | "same-context";
+
 interface Polarity {
+  reviewer?: "external" | "dispatch";
   adversary?: string;
   adversaryModel?: string;
+}
+
+/**
+ * Decide the review transport from the design. `reviewer: external` with a
+ * non-claude adversary is true external (model+process). `reviewer: external`
+ * with claude (or no distinct adversary) is dispatch-isolated — a fresh-context
+ * Claude subagent, which is still independent review. Otherwise same-context.
+ */
+function reviewTransport(p: Polarity): ReviewTransport {
+  if (p.reviewer === "external") {
+    return (p.adversary !== undefined && p.adversary !== "claude")
+      ? "external"
+      : "dispatch-isolated";
+  }
+  // reviewer: dispatch / unset, but a non-claude adversary still implies external
+  if (p.adversary !== undefined && p.adversary !== "claude") return "external";
+  return "same-context";
 }
 
 /**
@@ -300,32 +336,45 @@ function isReviewStage(s: z.infer<typeof StageSpecSchema>): boolean {
 }
 
 /**
- * Build the external-reviewer transport instruction appended to a review
- * stage's systemPrompt when the design's adversary is an EXTERNAL provider (not
- * claude). This is what makes the recorded polarity real: the produced factory's
- * driver is told to run @atalanta/external-reviewer's external-review-findings
- * bridge with the chosen adversary — an independent, context-isolated reviewer —
- * one pass per lens, rather than spawning same-context subagents. The reviewer
- * MODEL instance (defaultProvider = adversary) is scaffolded by the
- * factory-builder skill when the factory is installed.
+ * The transport instruction appended to a review stage's systemPrompt so the
+ * recorded polarity actually drives the produced factory's review. External runs
+ * the cli-agent bridge with a different-model adversary; dispatch-isolated
+ * spawns a fresh-context subagent (same model, independent context). same-context
+ * appends nothing (the driver reviews inline via the lens prompts).
  */
-function externalReviewInstruction(
+function reviewInstruction(
   reviewArtifact: string,
+  transport: ReviewTransport,
   p: Polarity,
 ): string {
-  const model = p.adversaryModel ? ` (${p.adversaryModel})` : "";
+  if (transport === "same-context") return "";
+  if (transport === "external") {
+    const model = p.adversaryModel ? ` (${p.adversaryModel})` : "";
+    return [
+      ``,
+      `EXTERNAL REVIEW (adversary = ${p.adversary}${model}, different model +`,
+      `process). Do NOT review from your own context. Run`,
+      `@atalanta/external-reviewer's external-review-findings workflow —`,
+      `reviewerModel=external-reviewer, factoryName=<this factory>,`,
+      `workItem=<ref>, artifact=${reviewArtifact}, cwd=. — once per lens, feeding`,
+      `each lens file as the prompt. The reviewer reads the subject from swamp`,
+      `itself and returns findings JSON; merge the passes into one record_artifact`,
+      `for "${reviewArtifact}" with the lenses' stable id prefixes. The`,
+      `external-reviewer + @mgreten/cli-agent extensions and an "external-reviewer"`,
+      `cli-agent instance (defaultProvider: ${p.adversary}) must be present — the`,
+      `factory-builder skill scaffolds them on install.`,
+    ].join("\n");
+  }
+  // dispatch-isolated
   return [
     ``,
-    `EXTERNAL REVIEW (polarity: adversary = ${p.adversary}${model}). Do NOT`,
-    `review from your own context. Run @atalanta/external-reviewer's`,
-    `external-review-findings workflow — reviewerModel=external-reviewer,`,
-    `factoryName=<this factory>, workItem=<ref>, artifact=${reviewArtifact},`,
-    `cwd=. — once per lens, feeding each lens file as the prompt. The reviewer`,
-    `reads the subject from swamp itself and returns findings JSON; merge the`,
-    `passes into one record_artifact for "${reviewArtifact}" with the lenses'`,
-    `stable id prefixes. The external-reviewer + @mgreten/cli-agent extensions`,
-    `and an "external-reviewer" cli-agent instance (defaultProvider: ${p.adversary})`,
-    `must be present — the factory-builder skill scaffolds them on install.`,
+    `ISOLATED REVIEW (fresh-context subagent — independent by context, same`,
+    `model). Do NOT review from your own working context. Spawn a SEPARATE`,
+    `subagent per lens with a clean context; give it only the lens file + the`,
+    `subject read from swamp (not your working state), and have it return findings`,
+    `JSON. Merge the passes into one record_artifact for "${reviewArtifact}" with`,
+    `the lenses' stable id prefixes. Context isolation — not a different model — is`,
+    `what makes this review independent.`,
   ].join("\n");
 }
 
@@ -341,22 +390,36 @@ function renderStage(
     entry.terminal = true;
     return entry; // terminal stages carry no work/artifacts/transitions
   }
-  if (s.maxCycles !== undefined) entry.maxCycles = s.maxCycles;
-  if (s.workMode !== undefined) {
+  // maxCycles: honour an explicit value; otherwise a review stage defaults higher
+  // than the engine's 5, because iterative prose/knowledge work converges slowly
+  // and a low cap blocks mid-run (real runs repeatedly hit 5 and had to override).
+  if (s.maxCycles !== undefined) {
+    entry.maxCycles = s.maxCycles;
+  } else if (isReviewStage(s)) {
+    entry.maxCycles = REVIEW_LOOP_MAX_CYCLES;
+  }
+  // A pure gate/approval stage — one that records nothing (no artifacts, no
+  // evidence) and just holds a human-approval / manual transition — gets NO
+  // `work` block. The engine requires record_dispatch before advancing ANY stage
+  // that has `work` (requiresDispatch keys on stage.work !== undefined), so a
+  // sign-off stage with an interactive work block would force a spurious
+  // record_dispatch before the human can approve. Omitting `work` removes that
+  // footgun; there is nothing to dispatch when there is nothing to record.
+  const producesNothing = s.artifacts.length === 0 && s.evidence.length === 0;
+  if (s.workMode !== undefined && !producesNothing) {
     const work: Record<string, unknown> = { mode: s.workMode };
     if (s.skills.length > 0) work.skills = s.skills;
-    // A review stage whose adversary is external gets the external-reviewer
-    // transport instruction appended, so the recorded polarity actually drives
-    // the produced factory's review. adversary=claude (or unset) leaves it as
-    // same-context dispatch (the documented fallback).
-    const wantsExternal = isReviewStage(s) &&
-      polarity.adversary !== undefined && polarity.adversary !== "claude";
-    if (wantsExternal) {
+    // A review stage gets the transport instruction for the design's polarity
+    // appended to its prompt (external / dispatch-isolated / same-context).
+    const transport = isReviewStage(s)
+      ? reviewTransport(polarity)
+      : "same-context";
+    if (isReviewStage(s) && transport !== "same-context") {
       const reviewArtifact = s.artifacts.find((a) =>
         a.kind === "findings"
       )!.name;
       work.systemPrompt = (s.systemPrompt ?? "") +
-        externalReviewInstruction(reviewArtifact, polarity);
+        reviewInstruction(reviewArtifact, transport, polarity);
     } else if (s.systemPrompt !== undefined) {
       work.systemPrompt = s.systemPrompt;
     }
@@ -411,39 +474,30 @@ export function assertUniqueDeclarations(design: DesignRecord): void {
 }
 
 /**
- * Assert the review polarity is coherent, so a design the assembler would
- * silently mis-wire fails loudly instead. Two contradictions, both otherwise
- * discovered only at assembly:
- *   - reviewer: external with adversary: claude — the factory driver IS Claude,
- *     so "Claude reviews" can only be same-context; external review needs a
- *     non-Claude adversary.
- *   - an external adversary (or reviewer: external) but no review stage the
- *     transport can land on. A review stage is dispatch + a kind: findings
- *     artifact (isReviewStage); a review authored as workMode: workflow is not
- *     recognised, so the external wiring would never attach.
- * Pure.
+ * Assert the review polarity has somewhere to attach. A design that asks for
+ * isolated review (reviewer: external, or a non-claude adversary) but declares
+ * no review stage would silently get no review wiring — a review stage is
+ * dispatch + a kind: findings artifact (isReviewStage); a review authored as
+ * workMode: workflow is not recognised. Note: reviewer: external + adversary:
+ * claude is NOT an error — it is dispatch-isolated review (a fresh-context
+ * subagent, same model, independent by context). Pure.
  */
 export function assertCoherentPolarity(design: DesignRecord): void {
-  const external = design.reviewer === "external" ||
-    (design.adversary !== undefined && design.adversary !== "claude");
-  if (!external) return; // same-context / unset: nothing to enforce
+  const wantsIsolation = reviewTransport({
+    reviewer: design.reviewer,
+    adversary: design.adversary,
+  }) !== "same-context";
+  if (!wantsIsolation) return;
 
-  if (design.reviewer === "external" && design.adversary === "claude") {
+  if (!design.stages.some(isReviewStage)) {
     throw new Error(
-      `reviewer is "external" but adversary is "claude": the factory driver is ` +
-        `Claude, so Claude-as-reviewer is same-context, not external. For ` +
-        `external context-isolated review, set adversary to a non-Claude agent ` +
-        `(codex/gemini/opencode/amp); for same-context review, set reviewer: dispatch.`,
-    );
-  }
-  const hasReviewStage = design.stages.some(isReviewStage);
-  if (!hasReviewStage) {
-    throw new Error(
-      `external review is configured (reviewer: external / adversary: ` +
-        `${design.adversary}) but no stage is a review stage — a review stage ` +
-        `must be workMode: "dispatch" AND declare a kind: findings artifact. A ` +
-        `review authored as workMode: "workflow" is not recognised; make it ` +
-        `dispatch so the external-reviewer transport attaches.`,
+      `isolated review is configured (reviewer: ${design.reviewer ?? "-"} / ` +
+        `adversary: ${
+          design.adversary ?? "-"
+        }) but no stage is a review stage — ` +
+        `a review stage must be workMode: "dispatch" AND declare a kind: findings ` +
+        `artifact. A review authored as workMode: "workflow" is not recognised; ` +
+        `make it dispatch so the review transport attaches.`,
     );
   }
 }
@@ -550,6 +604,7 @@ export function assembleDefinition(
   assertCoherentPolarity(design);
   assertDrivableGraph(design);
   const polarity: Polarity = {
+    reviewer: design.reviewer,
     adversary: design.adversary,
     adversaryModel: design.adversaryModel,
   };

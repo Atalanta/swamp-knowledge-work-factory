@@ -152,8 +152,23 @@ it, and does every rework edge that returns for revision land on that stage?** A
 loop that returns anywhere else dead-ends at runtime (and the assembler now
 rejects it).
 
+**Published work is amendable; don't freeze on `done`.** A truly-terminal stage
+has no transitions out, so once a run reaches it the artifact is frozen — a
+one-word title fix would need a destructive `reset`. Real authors make trivial
+post-publish edits. So for a factory that produces a shippable artifact, prefer
+this end shape over a bare `done`:
+- a **`published`** stage (NOT terminal — it records nothing, so no `work` block)
+  that the run rests at after sign-off, with two transitions:
+  - **`amend`** → back to the artifact's producing stage (re-record it in place,
+    then flow forward again — same rework-returns-to-producer rule),
+  - **`archive`** → a terminal **`archived`** stage (the locked end state).
+The run sits at `published` until the human amends or archives. Keep `aborted` as
+the global abort terminal. A factory that genuinely wants a hard freeze can still
+use a single `done` terminal — but ask the human whether post-publish edits
+should be possible.
+
 Record `stage-design` with a `stages[]` of `{id, kind, workMode, deterministic,
-description}`. Include the terminal `done` (and usually `aborted`).
+description}`. Include the terminals (`archived`/`done`, and usually `aborted`).
 
 ### Phase 3 — artifacts (artifact: `artifact-design`)
 
@@ -161,28 +176,49 @@ For each non-terminal stage, what durable product does it record, and what
 invariants must be locked in its schema? Push the human to name invariants that
 belong at the data layer (the method: "lock invariants in schemas, not in hope"):
 a coverage contract (`requiredUnits`), required sources for claim-tracing, claim
-ids with provenance. If the domain makes external factual claims, a `sources`
-record or `claims[]` field belongs here — otherwise the CRAFT-style lens has
-nothing to verify against.
+ids with provenance.
+
+**Ground truth for the fact-checking lens (ask this explicitly).** If the CRAFT
+lens will fact-check the document, the reviewer needs a ground-truth source to
+verify against, or it will false-flag true-but-unsourceable author facts. Make
+this a first-class evidence record — a `facts` (or `sources`) record the brief
+stage captures, wired into the review stage's prompt so the reviewer checks
+claims against it. Ask: "what is the source of truth the fact-check verifies
+against?" If there is none, say so — the lens then only checks internal
+consistency, not external truth. Do not leave this to be discovered mid-run when
+the reviewer starts fighting the author.
+
+**Findings double as the adjudication log (a deliberate feature).** The
+`kind: findings` payload carries `resolved` + `resolutionNote` per finding, and
+the `findings-clear` gate blocks only on UNRESOLVED blocking-severity findings.
+So the human's accept/reject decisions live in the findings record itself: a
+rejected-but-non-blocking finding is marked `resolved: true` with the reason in
+`resolutionNote`, and the gate passes. This is the intended mechanism — the
+findings artifact is both the reviewer's output and the author's decision log. If
+you want a richer log (who decided, when), a `kind: findings` artifact may ALSO
+declare a schema; those fields merge into the finding object.
 
 Record `artifact-design` with an `artifacts[]` of `{stageId, name, kind
 (regular|findings), invariants[]}`.
 
 ### Phase 4 — adversary (artifact: `lens-design`)
 
-- **External context-isolated reviewer, or same-context dispatch?** **Canon:
-  external** (`@atalanta/external-reviewer` — the reviewer is not the author).
-  Dispatch is the lightweight fallback (the driver reviews from its own context).
-- **Who authors, who is the adversary?** Normal polarity: author = `claude`,
-  adversary = `codex` — Claude (the driver) writes, an independent codex reviews.
-  **The driver of the produced factory is Claude, so external review REQUIRES a
-  non-Claude adversary.** If `reviewer: external`, `adversary` must be
-  `codex`/`gemini`/`opencode`/`amp` — never `claude` (Claude-as-reviewer is
-  same-context by definition, not external). If the human wants Claude to review,
-  that is `reviewer: dispatch` (same-context), not external. Do not record the
-  contradictory pair `reviewer: external` + `adversary: claude` — the assembler
-  rejects it. Optionally an `adversaryModel` (e.g. `gpt-5.5`). Reversing polarity
-  later is a one-field edit on the scaffolded reviewer instance.
+- **How independent should review be?** Context-isolation, not model-identity, is
+  what makes a review valid — a fresh-context reviewer is independent even if it
+  is the same model as the driver. Three transports, recorded via `reviewer` +
+  `adversary`:
+  - **external** (`reviewer: external` + a non-claude `adversary` like `codex`) —
+    a different model in a separate process (`@atalanta/external-reviewer`).
+    Model + process isolation; strongest. **Canon** where a second agent is set
+    up. Optionally an `adversaryModel` (e.g. `gpt-5.5`).
+  - **dispatch-isolated** (`reviewer: external` + `adversary: claude`) — a
+    fresh-context Claude subagent reviews Claude's work. Independent by context,
+    same model. Use when no external agent is configured but you still want
+    isolated review. This is NOT an error (a prior version wrongly rejected it).
+  - **same-context** (`reviewer: dispatch` or unset) — the driver reviews inline.
+    Weakest; the lightweight fallback.
+  Record `reviewer` and `adversary` to pick the tier. Reversing later is a
+  one-field edit.
 - What must review catch? Against which standards → which lenses? (For prose:
   the `kw-review-lenses` STRUCT/CRAFT/TONE set; for code: `ts-review-lenses`
   A/B/C. For a house standard, name it.)
@@ -262,13 +298,18 @@ of `{stageId, name, to, gateIntents[]}`.
    - **A review stage is `workMode: "dispatch"` with a `kind: "findings"`
      artifact.** That is the signal the assembler keys on. Do not author a review
      stage as `workMode: "workflow"` — it won't be recognised as review and the
-     external-reviewer wiring won't attach. If `reviewer: external` (or a
-     non-claude `adversary`), there MUST be such a dispatch+findings stage, and
-     `adversary` must NOT be `claude` (the driver is Claude — Claude-as-reviewer
-     is same-context, not external).
+     review transport won't attach. If any isolated review is configured
+     (`reviewer: external`, or a non-claude `adversary`), there MUST be such a
+     dispatch+findings stage. `reviewer: external` + `adversary: claude` is
+     allowed — it wires dispatch-isolated (fresh-context subagent), not external.
 
    Fill the free-form fields the interview captured (stage `systemPrompt`s, lens
-   skill names) directly into the record — evidence, not improvised now.
+   skill names) directly into the record — evidence, not improvised now. Put the
+   phase-4 `maxReviewCycles` on the review stage's `maxCycles` (and its producing
+   stage's), so the human's expected round count drives the cap. If you leave a
+   review stage's `maxCycles` unset, the assembler defaults it to 10 (higher than
+   the engine's 5, because knowledge-work review converges slowly) — never leave
+   it at the engine default for a review loop.
 2. `record_dispatch`, then `record_artifact name=design payload='<the DesignRecord>'`.
    Recording `design` **fires the `@atalanta/meta-factory` report** — it validates
    the record and emits the target factory definition as json. No method to run,
@@ -307,28 +348,29 @@ swamp model method run <factoryName> validate
 swamp model method run <factoryName> describe   # show the human the Mermaid
 ```
 
-### Scaffold the reviewer instance at the chosen polarity
+### Scaffold the reviewer instance — external tier only
 
-If the design used an external reviewer, create the `@mgreten/cli-agent` instance
-the factory's review stage references, with `defaultProvider` set to the
-`adversary` recorded in the design (normal polarity: `codex`):
+Only the **external** transport needs a `@mgreten/cli-agent` instance (a
+different-model reviewer in a separate process). The **dispatch-isolated** and
+**same-context** tiers need nothing scaffolded — the driver spawns the
+fresh-context subagent (or reviews inline) with no extra model. If the design's
+review stage carries the `EXTERNAL REVIEW` instruction, create the instance with
+`defaultProvider` = the recorded `adversary`:
 
 ```
 swamp model create @mgreten/cli-agent external-reviewer
 swamp model edit external-reviewer      # set globalArguments:
-#   defaultProvider: <adversary>        # e.g. codex (normal) — the ADVERSARY, not the author
+#   defaultProvider: <adversary>        # e.g. codex — the ADVERSARY (a non-claude model)
 #   defaultModel: <adversaryModel>      # e.g. gpt-5.5
 #   codexPath: <adversary-cli>          # the adversary provider's CLI on PATH
 #   wallTimeoutMs: 900000
 #   maxRetries: 1
 ```
 
-The author is whoever drives the factory (normally Claude via the
-`software-factory` skill). **Reversing polarity later is a one-field edit** —
-`swamp model edit external-reviewer` and change `defaultProvider`/`defaultModel`;
-the factory definition does not change, because it names the instance, not the
-provider. Confirm the adversary's CLI is installed and authenticated on the
-machine before the first review call.
+Confirm the adversary's CLI is installed and authenticated before the first
+review call. Reversing to a different provider later is a one-field edit
+(`defaultProvider`); the factory definition does not change, because it names the
+instance, not the provider.
 
 Then drive the new factory with the `software-factory` skill. The interview never
 runs the target factory.

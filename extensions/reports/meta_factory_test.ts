@@ -269,12 +269,22 @@ Deno.test("renderStage: no adversary set leaves the review stage same-context", 
   assertEquals(review.work!.systemPrompt, "Review the doc.");
 });
 
-Deno.test("assertCoherentPolarity: reviewer external + adversary claude throws", () => {
-  const bad = DesignRecordSchema.parse({
+Deno.test("renderStage: reviewer external + adversary claude wires dispatch-isolated (not an error)", () => {
+  // Same model, fresh-context subagent — independent by context. Valid, not a throw.
+  const design = DesignRecordSchema.parse({
     ...reviewDesign("claude"),
     reviewer: "external",
   });
-  assertThrows(() => assembleDefinition(bad), Error, "same-context, not external");
+  const def = assembleDefinition(design) as {
+    globalArguments: { stages: Array<{ id: string; work?: { systemPrompt?: string } }> };
+  };
+  const review = def.globalArguments.stages.find((s) => s.id === "review")!;
+  const prompt = review.work!.systemPrompt!;
+  assertEquals(prompt.includes("Review the doc."), true);
+  assertEquals(prompt.includes("ISOLATED REVIEW"), true);
+  assertEquals(prompt.includes("fresh-context subagent"), true);
+  // not the external-bridge instruction
+  assertEquals(prompt.includes("external-review-findings"), false);
 });
 
 Deno.test("assertCoherentPolarity: external adversary with no dispatch+findings review stage throws", () => {
@@ -309,6 +319,63 @@ Deno.test("assertCoherentPolarity: coherent external design passes", () => {
     globalArguments: { stages: Array<Record<string, unknown>> };
   };
   assertEquals(def.globalArguments.stages.length, 3);
+});
+
+Deno.test("renderStage: a review stage defaults maxCycles higher than the engine's 5", () => {
+  const def = assembleDefinition(reviewDesign("codex")) as {
+    globalArguments: { stages: Array<{ id: string; maxCycles?: number }> };
+  };
+  const review = def.globalArguments.stages.find((s) => s.id === "review")!;
+  assertEquals(review.maxCycles, 10);
+  // a non-review stage gets no injected maxCycles (engine default applies)
+  const draft = def.globalArguments.stages.find((s) => s.id === "draft")!;
+  assertEquals(draft.maxCycles, undefined);
+});
+
+Deno.test("renderStage: a pure human-approval stage gets no work block (no dispatch footgun)", () => {
+  const design = DesignRecordSchema.parse({
+    factoryName: "signoff",
+    stages: [
+      {
+        id: "draft",
+        initial: true,
+        workMode: "interactive",
+        artifacts: [{ name: "doc", kind: "regular", fields: [{ name: "body", type: "string", required: true }] }],
+        transitions: [{ name: "submit", to: "sign-off", gates: [{ intent: "artifact-present", artifact: "doc" }] }],
+      },
+      {
+        // records nothing — just the human approving. Should emit no `work`.
+        id: "sign-off",
+        workMode: "interactive",
+        transitions: [
+          { name: "ship", to: "done", manual: true, gates: [{ intent: "human-approval", id: "sign-off" }] },
+          { name: "send-back", to: "draft" },
+        ],
+      },
+      { id: "done", terminal: true },
+    ],
+  });
+  const def = assembleDefinition(design) as {
+    globalArguments: { stages: Array<{ id: string; work?: unknown }> };
+  };
+  const signoff = def.globalArguments.stages.find((s) => s.id === "sign-off")!;
+  assertEquals(signoff.work, undefined);
+  // a producing stage still has its work block
+  const draft = def.globalArguments.stages.find((s) => s.id === "draft")!;
+  assertEquals((draft.work as { mode?: string }).mode, "interactive");
+});
+
+Deno.test("renderStage: an explicit maxCycles on a review stage is honoured", () => {
+  const design = DesignRecordSchema.parse({
+    ...reviewDesign("codex"),
+    stages: reviewDesign("codex").stages.map((s) =>
+      s.id === "review" ? { ...s, maxCycles: 3 } : s
+    ),
+  });
+  const def = assembleDefinition(design) as {
+    globalArguments: { stages: Array<{ id: string; maxCycles?: number }> };
+  };
+  assertEquals(def.globalArguments.stages.find((s) => s.id === "review")!.maxCycles, 3);
 });
 
 Deno.test("assertDrivableGraph: reviewDesign's rework-returns-to-producer topology passes", () => {
