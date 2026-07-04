@@ -147,6 +147,7 @@ export const DesignRecordSchema = z.object({
   // adversary=claude/unset leaves review same-context. The reviewer MODEL
   // instance (defaultProvider = adversary) is scaffolded by the factory-builder
   // skill on install; reversing polarity later is a one-field edit on it.
+  reviewer: z.enum(["external", "dispatch"]).optional(),
   author: z.enum(["claude", "codex", "gemini", "opencode", "amp"]).optional(),
   adversary: z.enum(["claude", "codex", "gemini", "opencode", "amp"])
     .optional(),
@@ -410,6 +411,44 @@ export function assertUniqueDeclarations(design: DesignRecord): void {
 }
 
 /**
+ * Assert the review polarity is coherent, so a design the assembler would
+ * silently mis-wire fails loudly instead. Two contradictions, both otherwise
+ * discovered only at assembly:
+ *   - reviewer: external with adversary: claude — the factory driver IS Claude,
+ *     so "Claude reviews" can only be same-context; external review needs a
+ *     non-Claude adversary.
+ *   - an external adversary (or reviewer: external) but no review stage the
+ *     transport can land on. A review stage is dispatch + a kind: findings
+ *     artifact (isReviewStage); a review authored as workMode: workflow is not
+ *     recognised, so the external wiring would never attach.
+ * Pure.
+ */
+export function assertCoherentPolarity(design: DesignRecord): void {
+  const external = design.reviewer === "external" ||
+    (design.adversary !== undefined && design.adversary !== "claude");
+  if (!external) return; // same-context / unset: nothing to enforce
+
+  if (design.reviewer === "external" && design.adversary === "claude") {
+    throw new Error(
+      `reviewer is "external" but adversary is "claude": the factory driver is ` +
+        `Claude, so Claude-as-reviewer is same-context, not external. For ` +
+        `external context-isolated review, set adversary to a non-Claude agent ` +
+        `(codex/gemini/opencode/amp); for same-context review, set reviewer: dispatch.`,
+    );
+  }
+  const hasReviewStage = design.stages.some(isReviewStage);
+  if (!hasReviewStage) {
+    throw new Error(
+      `external review is configured (reviewer: external / adversary: ` +
+        `${design.adversary}) but no stage is a review stage — a review stage ` +
+        `must be workMode: "dispatch" AND declare a kind: findings artifact. A ` +
+        `review authored as workMode: "workflow" is not recognised; make it ` +
+        `dispatch so the external-reviewer transport attaches.`,
+    );
+  }
+}
+
+/**
  * The pure transform: a validated design record -> the object that becomes the
  * target factory's `globalArguments` (plus the top-level `reports` block when
  * the summary report is scoped). Deterministic; no IO. Throws on a design that
@@ -419,6 +458,7 @@ export function assembleDefinition(
   design: DesignRecord,
 ): Record<string, unknown> {
   assertUniqueDeclarations(design);
+  assertCoherentPolarity(design);
   const polarity: Polarity = {
     adversary: design.adversary,
     adversaryModel: design.adversaryModel,

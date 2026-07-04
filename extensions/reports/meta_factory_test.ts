@@ -9,6 +9,7 @@
 import { assertEquals, assertThrows } from "jsr:@std/assert@1";
 import {
   assembleDefinition,
+  assertCoherentPolarity,
   assertUniqueDeclarations,
   countGates,
   type DesignRecord,
@@ -265,6 +266,48 @@ Deno.test("renderStage: no adversary set leaves the review stage same-context", 
   };
   const review = def.globalArguments.stages.find((s) => s.id === "review")!;
   assertEquals(review.work!.systemPrompt, "Review the doc.");
+});
+
+Deno.test("assertCoherentPolarity: reviewer external + adversary claude throws", () => {
+  const bad = DesignRecordSchema.parse({
+    ...reviewDesign("claude"),
+    reviewer: "external",
+  });
+  assertThrows(() => assembleDefinition(bad), Error, "same-context, not external");
+});
+
+Deno.test("assertCoherentPolarity: external adversary with no dispatch+findings review stage throws", () => {
+  const bad = DesignRecordSchema.parse({
+    factoryName: "rev",
+    adversary: "codex",
+    stages: [
+      {
+        id: "draft",
+        initial: true,
+        workMode: "interactive",
+        artifacts: [{ name: "doc", kind: "regular", fields: [{ name: "body", type: "string", required: true }] }],
+        transitions: [{ name: "submit", to: "review", gates: [{ intent: "artifact-present", artifact: "doc" }] }],
+      },
+      {
+        // authored as workflow, not dispatch — NOT recognised as a review stage
+        id: "review",
+        workMode: "workflow",
+        artifacts: [{ name: "doc-review", kind: "findings", reviews: "doc" }],
+        transitions: [{ name: "accept", to: "done" }],
+      },
+      { id: "done", terminal: true },
+    ],
+  });
+  assertThrows(() => assembleDefinition(bad), Error, "no stage is a review stage");
+});
+
+Deno.test("assertCoherentPolarity: coherent external design passes", () => {
+  // codex adversary + a dispatch+findings review stage: assembles fine.
+  assertCoherentPolarity(reviewDesign("codex"));
+  const def = assembleDefinition(reviewDesign("codex")) as {
+    globalArguments: { stages: Array<Record<string, unknown>> };
+  };
+  assertEquals(def.globalArguments.stages.length, 3);
 });
 
 Deno.test("assertUniqueDeclarations: passes a well-formed design", () => {

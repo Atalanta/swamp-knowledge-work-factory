@@ -134,6 +134,12 @@ a stage that CAN be `workflow`/`method` (computation, linting, assembly) should
 not be an `interactive`/`dispatch` LLM stage. Reserve LLM stages for genuine
 judgement (drafting, review).
 
+**A `review`-kind stage MUST have `workMode: dispatch`** — that is the signal the
+assembler uses to recognise a review stage and attach review wiring. Do not give
+a review stage `workMode: workflow` (that is for deterministic, no-LLM steps like
+a linter or a test run). If the review is a deterministic linter, that is a
+separate `work` stage, not the `review` stage.
+
 Record `stage-design` with a `stages[]` of `{id, kind, workMode, deterministic,
 description}`. Include the terminal `done` (and usually `aborted`).
 
@@ -152,26 +158,29 @@ Record `artifact-design` with an `artifacts[]` of `{stageId, name, kind
 
 ### Phase 4 — adversary (artifact: `lens-design`)
 
+- **External context-isolated reviewer, or same-context dispatch?** **Canon:
+  external** (`@atalanta/external-reviewer` — the reviewer is not the author).
+  Dispatch is the lightweight fallback (the driver reviews from its own context).
 - **Who authors, who is the adversary?** Normal polarity: author = `claude`,
   adversary = `codex` — Claude (the driver) writes, an independent codex reviews.
-  Ask the human and record both. The choices are providers
-  (`claude`/`codex`/`gemini`/`opencode`/`amp`); optionally an `adversaryModel`
-  (e.g. `gpt-5.5`). The factory definition is polarity-neutral — it names a
-  reviewer *instance*, not a provider — so this choice drives how you scaffold
-  that instance (below), not the YAML. Reversing later is a one-field edit.
+  **The driver of the produced factory is Claude, so external review REQUIRES a
+  non-Claude adversary.** If `reviewer: external`, `adversary` must be
+  `codex`/`gemini`/`opencode`/`amp` — never `claude` (Claude-as-reviewer is
+  same-context by definition, not external). If the human wants Claude to review,
+  that is `reviewer: dispatch` (same-context), not external. Do not record the
+  contradictory pair `reviewer: external` + `adversary: claude` — the assembler
+  rejects it. Optionally an `adversaryModel` (e.g. `gpt-5.5`). Reversing polarity
+  later is a one-field edit on the scaffolded reviewer instance.
 - What must review catch? Against which standards → which lenses? (For prose:
   the `kw-review-lenses` STRUCT/CRAFT/TONE set; for code: `ts-review-lenses`
   A/B/C. For a house standard, name it.)
-- External context-isolated reviewer, or same-context dispatch? **Canon: external**
-  (`@atalanta/external-reviewer` — the reviewer is not the author). Dispatch is
-  the lightweight fallback.
 - A deterministic mechanical linter first? (Vale for prose via
   `@atalanta/vale-review`; a formatter/linter for code.) Canon: yes, gated,
   before the LLM review.
 - How many rework cycles before escalation to a human short of abort?
 
 Record `lens-design`: `{reviewer, author, adversary, adversaryModel?, lenses[],
-standards[], mechanicalLinterFirst, maxReviewCycles}`. Carry `author`,
+standards[], mechanicalLinterFirst, maxReviewCycles}`. Carry `reviewer`, `author`,
 `adversary`, `adversaryModel` into the consolidated `design` record too — they
 are evidence of the intended polarity.
 
@@ -197,25 +206,60 @@ of `{stageId, name, to, gateIntents[]}`.
 
 ### Phase 6 — assembly (deterministic; artifact: `design`)
 
-1. **Consolidate** the five phase artifacts into one `design` artifact — the
-   full `DesignRecord` the assembler report reads. Query each phase artifact's
-   payload
+1. **Consolidate** the five phase artifacts into one `design` artifact — the full
+   `DesignRecord` the assembler report reads. Query each phase artifact's payload
    (`swamp data query 'modelName=="factory-design" && name=="artifact-<session>-<phase>-design"' --select attributes.payload`)
-   and compose them into the DesignRecord shape: `factoryName`, `stages[]` with
-   per-stage `workMode/skills/systemPrompt/artifacts/evidence/transitions` (each
-   transition's gates as `{intent: …}` or `{raw: {type, config}}`),
-   `globalTransitions[]`, and the `author`/`adversary` polarity. Fill the
-   free-form fields the interview captured (stage `systemPrompt`s, lens skill
-   names) directly into the record — they are evidence, not improvised now.
+   and compose them into the EXACT shape below. Do NOT read the extension source
+   for the schema — this is it. The report validates against zod and rejects a
+   wrong shape, so match it precisely.
+
+   **DesignRecord shape** (the assembler's input contract):
+   - `factoryName` (string, required), `description?` (string)
+   - `reviewer?` `"external" | "dispatch"`, `author?` / `adversary?`
+     `"claude"|"codex"|"gemini"|"opencode"|"amp"`, `adversaryModel?` (string)
+   - `stages[]` (≥1), each:
+     - `id` (string, required), `description?`, `initial?` / `terminal?` (bool)
+     - `workMode?` `"interactive"|"dispatch"|"workflow"|"method"` (omit on terminal)
+     - `skills?` (string[]), `systemPrompt?`, `constraints?`, `maxCycles?` (int)
+     - `artifacts[]`: `{ name, kind: "regular"|"findings", reviews?, fields[] }`
+       where `fields[]` = `{ name, type: "string"|"array"|"object"|"number"|"integer"|"boolean", required?, minLength?, minItems?, enum?, itemsType?, description? }`
+     - `evidence[]`: `{ name, fields[] }` (same field shape)
+     - `transitions[]`: `{ name, to, manual?, gates[] }`
+   - each **gate** is EITHER an intent (params are SIBLINGS of `intent`, not
+     nested) OR a raw passthrough — exactly one:
+     - `{ intent: "review-clear", artifact: "<findings-artifact>" }` → fresh + findings-clear[critical,high]
+     - `{ intent: "human-approval", id: "<gate-id>" }`
+     - `{ intent: "coverage-contract" }` (optional `requiredUnitsPath`/`coveredUnitsPath`/`acceptedGapsPath`)
+     - `{ intent: "artifact-present", artifact: "<name>" }`
+     - `{ intent: "evidence-present", evidence: "<name>" }`
+     - `{ intent: "workflow-ok", workflow: "<name>" }`
+     - `{ intent: "test-failed", evidence: "<name>" }`
+     - `{ raw: { type: "<sf-gate-type>", config: { … } } }`
+   - `globalTransitions[]`: `{ name, to, gates[] }`
+
+   **Two hard rules the assembler enforces (it throws otherwise):**
+   - **Artifact/evidence names are global.** Declare each once, on its producing
+     stage; a later stage re-records it in place — do NOT re-declare it in that
+     stage's `artifacts[]`.
+   - **A review stage is `workMode: "dispatch"` with a `kind: "findings"`
+     artifact.** That is the signal the assembler keys on. Do not author a review
+     stage as `workMode: "workflow"` — it won't be recognised as review and the
+     external-reviewer wiring won't attach. If `reviewer: external` (or a
+     non-claude `adversary`), there MUST be such a dispatch+findings stage, and
+     `adversary` must NOT be `claude` (the driver is Claude — Claude-as-reviewer
+     is same-context, not external).
+
+   Fill the free-form fields the interview captured (stage `systemPrompt`s, lens
+   skill names) directly into the record — evidence, not improvised now.
 2. `record_dispatch`, then `record_artifact name=design payload='<the DesignRecord>'`.
-   Recording `design` **fires the `@atalanta/meta-factory` report** — it
-   validates the record and emits the target factory definition as json. No
-   method to run, no assembler instance.
-3. Read the report's json (the assembled definition):
-   `swamp data query 'modelName=="factory-design" && name=="report-<...>-@atalanta_factory-assembler"' --select attributes.json`
-   — or fetch it via `swamp report get` / `swamp report search`. If the report's
-   json carries an `error` (invalid design record), fix the `design` artifact and
-   re-record; do not hand-write the definition.
+   Recording `design` **fires the `@atalanta/meta-factory` report** — it validates
+   the record and emits the target factory definition as json. No method to run,
+   no assembler instance.
+3. Read the assembled definition from the report:
+   `swamp report get @atalanta/meta-factory` (its `json.definition` is the target
+   factory's globalArguments + reports; `json.error` is set if the design was
+   rejected — fix the `design` artifact and re-record, do not hand-write the
+   definition).
 4. `advance transition=assembled`.
 
 The consolidation is the one place you shape data by hand; the report is the
