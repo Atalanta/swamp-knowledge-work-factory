@@ -1,0 +1,263 @@
+type: '@swamp/software-factory'
+typeVersion: 2026.06.24.1
+id: 2daab953-a6d8-4738-833d-552bab5b3262
+name: factory-design
+version: 1
+tags: {}
+# The factory-design interview: a @swamp/software-factory whose output is the
+# design of ANOTHER @swamp/software-factory. You use a factory to design a
+# factory.
+#
+#   domain -> stages -> artifacts -> adversary -> gates -> assembly -> confirm -> done
+#
+# Each judgement phase is a CONSTRAINED conversation: the factory-builder skill
+# loads that phase's guidance, seed questions, and worked examples (from
+# docs/factory-canon.md + factory-method.md) and records the human's decisions
+# as a strict, schema-validated design artifact. The phase cannot advance until
+# its artifact exists in the required shape — that is what stops the interview
+# being an unstructured ramble. Every decision is persisted as swamp data, not
+# left in agent context.
+#
+# The `assembly` phase is a model METHOD (@atalanta/factory-assembler): it reads
+# the consolidated `design` artifact and renders the target factory YAML
+# deterministically. No LLM in assembly — the judgement was captured in the
+# phases and is now evidence; assembly is a pure function of it.
+#
+# The per-phase artifacts (domain-design, stage-design, ...) capture the
+# human-facing decisions phase by phase. The final `design` artifact is the
+# machine-facing consolidated DesignRecord the assembler consumes; its nested
+# shape is validated for real by the assembler's zod DesignRecordSchema (the SF
+# schema subset cannot express the full recursive record, so the artifact
+# schema here checks only that the consolidated object is present and non-empty).
+#
+# Drive this with the `factory-builder` skill.
+globalArguments:
+  stages:
+    - id: domain
+      initial: true
+      description: >-
+        Phase 1 — Domain. What knowledge work is this factory for? What is the
+        finished artifact, and what document type/mode is it? The builder skill
+        asks the seed questions and records the decisions.
+      work:
+        mode: interactive
+        skills: [factory-builder]
+      artifacts:
+        - name: domain-design
+          schema:
+            type: object
+            required: [factoryName, knowledgeWork, artifactDescription]
+            properties:
+              factoryName: { type: string, minLength: 1 }
+              knowledgeWork: { type: string, minLength: 1 }
+              artifactDescription: { type: string, minLength: 1 }
+              docType:
+                type: string
+                enum: [tutorial, how-to, reference, explanation, other]
+      transitions:
+        - name: next
+          to: stages
+          gates:
+            - { type: artifact-exists, config: { artifact: domain-design } }
+
+    - id: stages
+      description: >-
+        Phase 2 — Stages. What is the happy-path stage flow? For each stage: its
+        work mode, and whether it is deterministic (workflow/method) or
+        judgement (interactive/dispatch). The method calls for making
+        deterministic everything that can be.
+      work:
+        mode: interactive
+        skills: [factory-builder]
+      artifacts:
+        - name: stage-design
+          schema:
+            type: object
+            required: [stages]
+            properties:
+              stages:
+                type: array
+                minItems: 2
+                items:
+                  type: object
+                  required: [id, kind]
+                  properties:
+                    id: { type: string, minLength: 1 }
+                    kind:
+                      type: string
+                      enum: [initial, work, review, terminal]
+                    workMode:
+                      type: string
+                      enum: [interactive, dispatch, workflow, method]
+                    deterministic: { type: boolean }
+                    description: { type: string }
+      transitions:
+        - name: next
+          to: artifacts
+          gates:
+            - { type: artifact-exists, config: { artifact: stage-design } }
+
+    - id: artifacts
+      description: >-
+        Phase 3 — Artifacts & schemas. For each stage, what durable product does
+        it record, and what invariants must be locked in the schema (coverage
+        contract, required sources, claim provenance)? Lock invariants at the
+        data layer rather than hoping a reviewer catches their absence.
+      work:
+        mode: interactive
+        skills: [factory-builder]
+      artifacts:
+        - name: artifact-design
+          schema:
+            type: object
+            required: [artifacts]
+            properties:
+              artifacts:
+                type: array
+                items:
+                  type: object
+                  required: [stageId, name, kind]
+                  properties:
+                    stageId: { type: string, minLength: 1 }
+                    name: { type: string, minLength: 1 }
+                    kind:
+                      type: string
+                      enum: [regular, findings]
+                    invariants: { type: array, items: { type: string } }
+      transitions:
+        - name: next
+          to: adversary
+          gates:
+            - { type: artifact-exists, config: { artifact: artifact-design } }
+
+    - id: adversary
+      description: >-
+        Phase 4 — The adversary. What must review catch, against which standards
+        (which lenses)? External context-isolated reviewer (canon) or dispatch
+        fallback? How many rework cycles before escalation? A mechanical linter
+        first?
+      work:
+        mode: interactive
+        skills: [factory-builder]
+      artifacts:
+        - name: lens-design
+          schema:
+            type: object
+            required: [reviewer, lenses]
+            properties:
+              reviewer:
+                type: string
+                enum: [external, dispatch]
+              lenses: { type: array, minItems: 1, items: { type: string } }
+              standards: { type: array, items: { type: string } }
+              mechanicalLinterFirst: { type: boolean }
+              maxReviewCycles: { type: integer, minimum: 1 }
+      transitions:
+        - name: next
+          to: gates
+          gates:
+            - { type: artifact-exists, config: { artifact: lens-design } }
+
+    - id: gates
+      description: >-
+        Phase 5 — Gates. For each transition, what must be PROVABLY TRUE to leave
+        the stage? Where is the one human sign-off the interpreter cannot
+        self-satisfy? The builder captures each gate as an intent (expanded by
+        the assembler) or a raw gate type + config.
+      work:
+        mode: interactive
+        skills: [factory-builder]
+      artifacts:
+        - name: gate-design
+          schema:
+            type: object
+            required: [transitions]
+            properties:
+              transitions:
+                type: array
+                minItems: 1
+                items:
+                  type: object
+                  required: [stageId, name, to]
+                  properties:
+                    stageId: { type: string, minLength: 1 }
+                    name: { type: string, minLength: 1 }
+                    to: { type: string, minLength: 1 }
+                    gateIntents: { type: array, items: { type: string } }
+      transitions:
+        - name: next
+          to: assembly
+          gates:
+            - { type: artifact-exists, config: { artifact: gate-design } }
+
+    - id: assembly
+      description: >-
+        Phase 6 — Assembly (deterministic). The builder consolidates the five
+        phase artifacts into one `design` artifact (the DesignRecord the
+        assembler reads), then this stage runs @atalanta/factory-assembler.build
+        to render the target factory YAML as a file output. No LLM: a pure
+        projection of the recorded design.
+      work:
+        mode: method
+        method:
+          modelIdOrName: assembler
+          methodName: build
+          inputs:
+            session: '${{ self.workItem }}'
+        resultEvidence: assembly-run
+      artifacts:
+        # The consolidated machine-facing DesignRecord. The builder records this
+        # from the five phase artifacts BEFORE running the assembler method.
+        # Nested shape is validated for real by the assembler's zod schema.
+        - name: design
+          schema:
+            type: object
+            additionalProperties: true
+            required: [factoryName, stages]
+            properties:
+              factoryName: { type: string, minLength: 1 }
+              stages: { type: array, minItems: 1 }
+      transitions:
+        - name: assembled
+          to: confirm
+          gates:
+            - { type: artifact-exists, config: { artifact: design } }
+            - type: evidence-recorded
+              config: { name: assembly-run, requireField: { status: succeeded } }
+
+    - id: confirm
+      description: >-
+        Phase 7 — Human confirm. Present the rendered target factory YAML and its
+        Mermaid to the human. On approval the interview is done; the target
+        factory YAML (a file artifact on the assembler) is installed as a live
+        definition as a separate explicit step. The interview never runs the
+        target factory.
+      work:
+        mode: interactive
+        skills: [factory-builder]
+      transitions:
+        - name: confirmed
+          to: done
+          manual: true
+          gates:
+            - { type: human-approval, config: { id: design-confirm } }
+        - name: revise
+          to: stages
+
+    - id: done
+      terminal: true
+
+    - id: aborted
+      terminal: true
+
+  globalTransitions:
+    - name: abort
+      to: aborted
+      gates:
+        - type: human-approval
+          config: { id: abort-confirmation }
+
+reports:
+  require:
+    - { name: "@swamp/software-factory/work-item-summary", methods: [summary] }
+methods: {}

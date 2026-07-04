@@ -1,0 +1,50 @@
+manifestVersion: 1
+name: '@atalanta/factory-assembler'
+version: 2026.07.04.1
+description: |
+  Deterministically assemble a @swamp/software-factory definition from the design
+  record produced by the factory-design interview. A pure projection: it reads
+  the interview's consolidated `design` artifact (a DesignRecord) and renders the
+  target factory's globalArguments + reports as YAML, emitted as a file output.
+
+  Fidelity is hybrid — common patterns are captured as intent in the design
+  record and expanded here by rule (a review stage's fresh + findings-clear +
+  human-approval stack; a coverage-contract cel gate; a human sign-off), while
+  uncommon needs are captured as raw gate type + config and passed through. The
+  intent->grammar ruleset (expandGates) is the one opinionated surface and is
+  unit-tested in isolation.
+
+  Non-determinism lives in the interview and is captured as evidence; assembly is
+  a function of it — the same design record always produces the same factory. The
+  output is a file artifact (evidence); installing it as a live git-tracked
+  definition is a separate explicit step, preserving swamp's source/runtime split.
+
+  Ships the `factory-builder` skill that drives the interview and this assembler.
+
+  ## Use
+
+  ```
+  swamp extension pull @atalanta/factory-assembler
+  swamp model create @atalanta/factory-assembler assembler
+  # invoke the bundled `factory-builder` skill to run the factory-design interview
+  ```
+repository: 'https://github.com/Atalanta/swamp-knowledge-work-factory'
+models:
+  - factory_assembler.ts
+workflows: []
+vaults: []
+drivers: []
+datastores: []
+reports: []
+skills:
+  - factory-builder
+additionalFiles:
+  - README.md
+  - LICENSE.txt
+labels:
+  - software-factory
+  - meta
+  - factory-builder
+  - knowledge-work
+dependencies:
+  - '@swamp/software-factory'
