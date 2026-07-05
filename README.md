@@ -142,16 +142,28 @@ constraints/
 
 ## Polarity and known limitations
 
-**Polarity is wired from the recorded adversary.** When a design's `adversary`
-is an external provider (e.g. `codex`), the assembler appends the
-`@atalanta/external-reviewer` transport instruction to each review stage (a
-`dispatch` stage recording a `kind: findings` artifact): the produced factory's
-driver runs the external-review bridge with that adversary — an independent,
-context-isolated reviewer — instead of same-context subagents. `adversary:
-claude` (or unset) leaves the review stage same-context (the fallback). The
-`factory-builder` skill scaffolds the `@mgreten/cli-agent` reviewer instance
-(`defaultProvider: <adversary>`) when it installs the factory; reversing polarity
-later is a one-field edit on that instance.
+**Review transport is wired from `reviewer` + `adversary`.** Context-isolation,
+not model-identity, makes review independent. Three tiers the assembler emits on
+each review stage (a `dispatch` stage recording a `kind: findings` artifact):
+- **external** — `reviewer: external` + a non-claude `adversary` (e.g. `codex`):
+  a different model in a separate process via `@atalanta/external-reviewer`.
+  Strongest. The `factory-builder` skill scaffolds the `@mgreten/cli-agent`
+  reviewer instance on install.
+- **dispatch-isolated** — `reviewer: external` + `adversary: claude`: a
+  fresh-context Claude subagent, independent by context. No instance to scaffold.
+- **same-context** — `reviewer: dispatch` or unset: the driver reviews inline.
+
+Reversing tier later is a one-field edit.
+
+## Publishing (maintainer note)
+
+The adversarial-review report written before each `swamp extension push` covers
+**all bundled surfaces, not just `meta_factory.ts`**: the report code, the bundled
+`templates/factory-design.definition.yaml`, and the `factory-builder` skill. The
+`.1` duplicate-`reports`-block bug shipped because an earlier review looked only at
+the TS. Review the template (engine-validate it: install a throwaway instance from
+it, `validate`, discard) and the skill (stale/contradictory guidance, unresolved
+references) as part of the gate.
 
 Known limitations:
 
