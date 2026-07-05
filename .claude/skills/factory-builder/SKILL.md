@@ -326,10 +326,30 @@ deterministic projection. Keep judgement in the recorded design fields.
 
 ### Phase 7 — confirm (human)
 
-Present the assembled definition (the assembler report's `json.definition`) and,
-if useful, the target's rendered Mermaid — the record, not your memory of it. On
-the human's explicit "go": `approve gateId=design-confirm actor=<who>`, then
-`advance transition=confirmed`. Never approve on their behalf.
+**First, engine-validate the assembled definition — do not present a factory the
+engine can't drive.** The assembler's static checks (unique declarations, polarity
+coherence, drivable graph) catch known classes, but the engine's own `validate` is
+the ground truth. Install the assembled definition as a THROWAWAY instance, run
+`validate`, and discard it:
+
+```
+swamp model create @swamp/software-factory <factoryName>-precheck
+# write the report's json.definition (globalArguments + reports) into the created
+# models/@swamp/software-factory/<uuid>.yaml, under the minted header, trailing methods: {}
+swamp model method run <factoryName>-precheck validate     # MUST report valid
+# then delete the precheck instance file (rm the <uuid>.yaml) — it was only a check
+```
+
+If `validate` reports errors, the design is wrong in a way the assembler didn't
+catch: fix the `design` artifact (route rework to the producer, declare a missing
+artifact, correct a gate reference), re-record it, re-read the report, and
+re-validate. Do not present or install a definition that fails engine `validate`.
+Consider filing the gap so the assembler learns to catch that class too.
+
+Once it validates: present the assembled definition (the report's
+`json.definition`) and, if useful, the rendered Mermaid — the record, not your
+memory of it. On the human's explicit "go": `approve gateId=design-confirm
+actor=<who>`, then `advance transition=confirmed`. Never approve on their behalf.
 
 ## After the interview: install the target factory
 
