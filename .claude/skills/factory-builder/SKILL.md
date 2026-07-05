@@ -322,7 +322,11 @@ of `{stageId, name, to, gateIntents[]}`.
 4. `advance transition=assembled`.
 
 The consolidation is the one place you shape data by hand; the report is the
-deterministic projection. Keep judgement in the recorded design fields.
+deterministic projection. Keep judgement in the recorded design fields. (Design
+decision: consolidation stays hand-shaped so the interview phases stay
+conversational summaries rather than full-detail form-filling. The exact target
+shape is the DesignRecord spec above, and the confirm phase engine-`validate`s the
+result — so a hand-consolidation slip is caught before install, not shipped.)
 
 ### Phase 7 — confirm (human)
 

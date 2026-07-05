@@ -172,3 +172,16 @@ Known limitations:
   The assembler now fails loudly (`assembleDefinition` throws, the report returns
   `{error}`) if a design double-declares a name, rather than emitting a
   definition the engine rejects at `validate`.
+
+- **Phase-6 consolidation is hand-shaped (deliberate).** The interview phases
+  capture SUMMARIES (stage kinds/modes, artifact names + invariants, gate
+  intents); at phase 6 the driver composes these into the full DesignRecord
+  (attaching systemPrompts, field schemas, gate specs) by hand. This is the one
+  non-mechanical step. It could be made a deterministic join by enriching the
+  phase-artifact schemas to full DesignRecord granularity — but that turns the
+  interview into structured form-filling, which is the opposite of the
+  conversation it's meant to be. Decision: keep the phases conversational and the
+  consolidation hand-shaped; the exact DesignRecord shape is documented in the
+  `factory-builder` skill (phase 6), and the engine-`validate` at the confirm
+  phase catches any error the hand-consolidation introduces before install. The
+  tradeoff is a driver judgement step in exchange for a human-friendly interview.

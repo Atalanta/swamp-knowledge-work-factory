@@ -1,6 +1,6 @@
 manifestVersion: 1
 name: '@atalanta/meta-factory'
-version: 2026.07.04.8
+version: 2026.07.04.9
 description: |
   Deterministically assemble a @swamp/software-factory definition from the design
   record produced by the factory-design interview. This is a swamp REPORT, not a
